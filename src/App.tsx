@@ -374,6 +374,11 @@ export default function App() {
   const sortedInlinks = sortArray(searchedInlinks);
   const sortedRedirects = sortArray(searchedRedirects);
 
+  const paginatedMissing = sortedMissing.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const paginatedOptimizations = sortedOptimizations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const paginatedInlinks = sortedInlinks.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const paginatedRedirects = sortedRedirects.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
   const groupedOpportunities = useMemo(() => {
     const grouped: Record<string, any> = {};
     opportunities.forEach(opp => {
