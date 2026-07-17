@@ -48,7 +48,7 @@ export default function App() {
   const [customKeywords, setCustomKeywords] = useState<Record<string, string>>({});
 
   // CHANGE THIS TO YOUR HEROKU URL
-  const API_BASE_URL = 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com/'; 
+  const API_BASE_URL = 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com'; 
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
