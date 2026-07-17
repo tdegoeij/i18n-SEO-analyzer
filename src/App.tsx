@@ -346,23 +346,25 @@ export default function App() {
   const sortedInlinks = sortArray(searchedInlinks);
   const sortedRedirects = sortArray(searchedRedirects);
 
-  const paginatedMissing = sortedMissing.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  const paginatedOptimizations = sortedOptimizations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  const paginatedInlinks = sortedInlinks.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  const paginatedRedirects = sortedRedirects.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
   const groupedOpportunities = useMemo(() => {
     const grouped: Record<string, any> = {};
     opportunities.forEach(opp => {
-      if (!grouped[opp.enLink]) {
-        grouped[opp.enLink] = { enLink: opp.enLink, i18nLink: opp.i18nLink, sources: [] };
-      }
-      if (!grouped[opp.enLink].sources.includes(opp.source)) {
-        grouped[opp.enLink].sources.push(opp.source);
+      // Filter out links that are actually international links misidentified by the sitemap
+      const isTrueEnLink = !data.languages.some((lang: string) => 
+        opp.enLink.includes(`/${lang}/`) || opp.enLink.endsWith(`/${lang}`)
+      );
+      
+      if (isTrueEnLink) {
+        if (!grouped[opp.enLink]) {
+          grouped[opp.enLink] = { enLink: opp.enLink, i18nLink: opp.i18nLink, sources: [] };
+        }
+        if (!grouped[opp.enLink].sources.includes(opp.source)) {
+          grouped[opp.enLink].sources.push(opp.source);
+        }
       }
     });
     return Object.values(grouped).sort((a: any, b: any) => b.sources.length - a.sources.length);
-  }, [opportunities]);
+  }, [opportunities, data.languages]);
 
   const groupedBroken = useMemo(() => {
     const grouped: Record<string, any> = {};
@@ -747,7 +749,7 @@ export default function App() {
                       <table className="w-full text-left text-sm relative">
                         <thead className="bg-[#F8F9FA] border-b border-[#DFE3E8] text-[#4C535D] uppercase text-xs font-semibold sticky top-0 z-10">
                           <tr>
-                            <th onClick={() => handleSort('url')} className="px-6 py-4 w-7/12 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
+                            <th onClick={() => handleSort('url')} className="px-6 py-4 w-4/12 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
                               <div className="flex items-center">Localized Page URL {getSortIcon('url')}</div>
                             </th>
                             <th onClick={() => handleSort('inlinks')} className="px-6 py-4 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
