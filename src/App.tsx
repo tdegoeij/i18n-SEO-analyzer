@@ -48,6 +48,33 @@ export default function App() {
   const [analysisResults, setAnalysisResults] = useState<Record<string, any>>({});
   const [customKeywords, setCustomKeywords] = useState<Record<string, string>>({});
 
+  const getLocalImpressions = (gscNode: any, lang: string) => {
+    if (!gscNode || !gscNode.country_impressions) return 0;
+    const map: Record<string, string[]> = {
+      'nl': ['nld', 'bel'],
+      'fr': ['fra', 'bel', 'che', 'can'],
+      'de': ['deu', 'aut', 'che'],
+      'es': ['esp', 'mex', 'arg', 'col', 'per', 'chl'],
+      'it': ['ita', 'che'],
+      'pt': ['prt', 'bra'],
+      'ja': ['jpn'],
+      'ko': ['kor'],
+      'sv': ['swe'],
+      'no': ['nor'],
+      'da': ['dnk'],
+      'fi': ['fin'],
+      'pl': ['pol'],
+      'ru': ['rus'],
+      'tr': ['tur'],
+    };
+    const targets = map[lang] || [];
+    let total = 0;
+    for (const country of targets) {
+      total += (gscNode.country_impressions[country] || 0);
+    }
+    return total;
+  };
+
   // CHANGE THIS TO YOUR HEROKU URL
   const API_BASE_URL = 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com'; 
 
@@ -273,7 +300,8 @@ export default function App() {
           id: `missing-${idx}`,
           enUrl: enUrl,
           keyword: enGsc.topKeyword,
-          impressions: enGsc.impressions
+          impressions: enGsc.impressions,
+          localImpressions: getLocalImpressions(enGsc, selectedLang)
         });
       }
 
@@ -389,8 +417,8 @@ export default function App() {
     let rows: any[] = [];
 
     if (activeTab === 'missing') {
-      headers = ['English URL', 'EN Impressions', 'Top Keyword'];
-      rows = sortedMissing.map(item => [item.enUrl, item.impressions, item.keyword]);
+      headers = ['English URL', 'Total EN Impressions', `Local Market Impressions (${selectedLang?.toUpperCase()})`, 'Top Keyword'];
+      rows = sortedMissing.map(item => [item.enUrl, item.impressions, item.localImpressions, item.keyword]);
     } else if (activeTab === 'optimize') {
       headers = ['Localized URL', 'Original EN URL', 'Local Impressions', 'Target Keyword', 'Title Match', 'H1 Match', 'H2 Match', 'Mentions'];
       rows = sortedOptimizations.map(item => {
@@ -405,8 +433,8 @@ export default function App() {
         ];
       });
     } else if (activeTab === 'inlinks') {
-      headers = ['Localized Page URL', 'Total Inlinks', 'Source Pages'];
-      rows = sortedInlinks.map(item => [item.url, item.inlinks, item.sources.join(' | ')]);
+      headers = ['Localized Page URL', 'Total Inlinks', 'Unique Structural Inlinks', 'Source Pages'];
+      rows = sortedInlinks.map(item => [item.url, item.inlinks, item.uniqueInlinks, item.sources.map((s: any) => `${s.url} [${s.anchor}]`).join(' | ')]);
     } else if (activeTab === 'redirects') {
       headers = ['Original Link', 'Destination', 'Status Code', 'Source Pages'];
       rows = sortedRedirects.map(item => [item.originalUrl, item.destinationUrl, item.statusCode, (item.sources || []).join(' | ')]);
@@ -514,7 +542,7 @@ export default function App() {
         </div>
         
         <div className="p-4 flex-1 overflow-y-auto">
-          <div className="text-xs font-semibold text-[#4C535D] uppercase tracking-wider mb-4 px-2">Discovered Languages</div>
+          <div className="text-xs font-semibold text-[#4C535D] uppercase tracking-wider mb-4 px-2">Discovered Markets</div>
           <ul className="space-y-1">
             {data.languages.map((lang: string) => (
               <li key={lang}>
@@ -548,7 +576,7 @@ export default function App() {
               <ArrowRightLeft className="w-4 h-4" /> 301 Redirects
             </button>
             <button onClick={() => setActiveTab('links')} className={`pb-4 px-2 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'links' ? 'border-[#282C33] text-[#282C33]' : 'border-transparent text-[#4C535D] hover:text-[#282C33]'}`}>
-              <Edit3 className="w-4 h-4" /> i18n Link Updates
+              <Edit3 className="w-4 h-4" /> Link Updates
             </button>
             <button onClick={() => setActiveTab('broken')} className={`pb-4 px-2 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'broken' ? 'border-[#282C33] text-[#282C33]' : 'border-transparent text-[#4C535D] hover:text-[#282C33]'}`}>
               <XCircle className="w-4 h-4" /> 404 Pages
@@ -622,11 +650,14 @@ export default function App() {
                 <table className="w-full text-left text-sm relative">
                   <thead className="bg-[#F8F9FA] border-b border-[#DFE3E8] text-[#4C535D] uppercase text-xs font-semibold sticky top-0 z-10">
                     <tr>
-                      <th onClick={() => handleSort('enUrl')} className="px-6 py-4 w-5/12 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
+                      <th onClick={() => handleSort('enUrl')} className="px-6 py-4 w-4/12 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
                         <div className="flex items-center">English URL {getSortIcon('enUrl')}</div>
                       </th>
                       <th onClick={() => handleSort('impressions')} className="px-6 py-4 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
-                        <div className="flex items-center">EN Impressions {getSortIcon('impressions')}</div>
+                        <div className="flex items-center" title="Total global impressions for the EN page">Global EN Impr. {getSortIcon('impressions')}</div>
+                      </th>
+                      <th onClick={() => handleSort('localImpressions')} className="px-6 py-4 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
+                        <div className="flex items-center" title="Impressions coming specifically from countries speaking this language">Local Market Impr. {getSortIcon('localImpressions')}</div>
                       </th>
                       <th onClick={() => handleSort('keyword')} className="px-6 py-4 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
                         <div className="flex items-center">Top Keyword {getSortIcon('keyword')}</div>
@@ -641,8 +672,11 @@ export default function App() {
                             {page.enUrl.replace(/^https?:\/\/[^\/]+/, '')} <ExternalLink className="w-3 h-3 inline shrink-0" />
                           </a>
                         </td>
-                        <td className="px-6 py-4 align-middle font-semibold text-[#282C33]">
+                        <td className="px-6 py-4 align-middle font-semibold text-[#4C535D]">
                           {page.impressions.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 align-middle font-semibold text-[#1071E5]">
+                          {page.localImpressions.toLocaleString()}
                         </td>
                         <td className="px-6 py-4 align-middle">
                           <span className="bg-[#F2F3F5] px-2.5 py-1 rounded text-[#282C33] font-medium border border-[#DFE3E8]">{page.keyword}</span>
@@ -687,6 +721,9 @@ export default function App() {
                             <a href={page.localUrl} target="_blank" rel="noreferrer" className="text-[#282C33] hover:underline font-medium flex items-center gap-1 w-max">
                               {page.localUrl.replace(/^https?:\/\/[^\/]+/, '')} <ExternalLink className="w-3 h-3 inline shrink-0" />
                             </a>
+                            <div className="text-xs text-[#4C535D] mt-1.5 flex items-center gap-1">
+                              Original: {page.enUrl.replace(/^https?:\/\/[^\/]+/, '')}
+                            </div>
                           </td>
                           <td className="px-6 py-4 align-middle font-semibold text-[#282C33]">
                             {page.impressions.toLocaleString()}
@@ -718,6 +755,17 @@ export default function App() {
                                 <span className={`px-2 py-0.5 rounded font-semibold border ${analysisResults[page.localUrl].inH1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>H1</span>
                                 <span className={`px-2 py-0.5 rounded font-semibold border ${analysisResults[page.localUrl].inH2 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>H2</span>
                                 <span className="text-[#4C535D] font-medium ml-1 text-xs">{analysisResults[page.localUrl].wordCount} mentions</span>
+                                <button 
+                                  onClick={() => {
+                                    const newRes = {...analysisResults};
+                                    delete newRes[page.localUrl];
+                                    setAnalysisResults(newRes);
+                                  }}
+                                  className="ml-2 text-[#4C535D] hover:text-red-500 transition-colors"
+                                  title="Clear analysis to run again"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
                               </div>
                             )}
                           </td>
@@ -737,7 +785,7 @@ export default function App() {
               {!isInlinksScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <LinkIcon className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex flex-col flex-1 bg-white rounded-xl shadow-sm border border-[#DFE3E8] overflow-hidden">
@@ -746,11 +794,14 @@ export default function App() {
                       <table className="w-full text-left text-sm relative">
                         <thead className="bg-[#F8F9FA] border-b border-[#DFE3E8] text-[#4C535D] uppercase text-xs font-semibold sticky top-0 z-10">
                           <tr>
-                            <th onClick={() => handleSort('url')} className="px-6 py-4 w-4/12 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
+                            <th onClick={() => handleSort('url')} className="px-6 py-4 w-5/12 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
                               <div className="flex items-center">Localized Page URL {getSortIcon('url')}</div>
                             </th>
                             <th onClick={() => handleSort('inlinks')} className="px-6 py-4 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
-                              <div className="flex items-center">Total Inlinks {getSortIcon('inlinks')}</div>
+                              <div className="flex items-center" title="Total raw link tags found">Total Inlinks {getSortIcon('inlinks')}</div>
+                            </th>
+                            <th onClick={() => handleSort('uniqueInlinks')} className="px-6 py-4 cursor-pointer hover:bg-[#DFE3E8] transition-colors group">
+                              <div className="flex items-center" title="Links with unique anchor text (groups structural/nav links together)">Unique Inlinks {getSortIcon('uniqueInlinks')}</div>
                             </th>
                             <th className="px-6 py-4 bg-[#F8F9FA]"></th>
                           </tr>
@@ -777,6 +828,11 @@ export default function App() {
                                       {page.inlinks === 0 && <span className="text-xs bg-[#FF3D3D] text-white px-2 py-0.5 rounded font-medium uppercase tracking-wide">Orphan</span>}
                                     </div>
                                   </td>
+                                  <td className="px-6 py-4 align-middle">
+                                    <span className="text-[#4C535D] font-semibold bg-[#F2F3F5] px-2.5 py-1 rounded-md border border-[#DFE3E8]">
+                                      {page.uniqueInlinks || 0}
+                                    </span>
+                                  </td>
                                   <td className="px-6 py-4 align-middle text-right">
                                     {page.inlinks > 0 && (
                                       isExpanded ? <ChevronDown className="w-5 h-5 text-[#4C535D] inline" /> : <ChevronRight className="w-5 h-5 text-[#4C535D] inline" />
@@ -785,16 +841,19 @@ export default function App() {
                                 </tr>
                                 {isExpanded && page.inlinks > 0 && (
                                   <tr>
-                                    <td colSpan={3} className="p-0 border-b border-[#DFE3E8] bg-[#F8F9FA]">
+                                    <td colSpan={4} className="p-0 border-b border-[#DFE3E8] bg-[#F8F9FA]">
                                       <div className="px-6 py-4 shadow-inner">
                                         <div className="text-xs font-semibold text-[#4C535D] uppercase tracking-wider mb-3">Linked From ({page.sources.length} Pages)</div>
-                                        <ul className="space-y-2">
-                                          {page.sources.map((source: string, sIdx: number) => (
-                                            <li key={sIdx} className="text-sm">
-                                              <a href={source} target="_blank" rel="noreferrer" className="text-[#282C33] hover:underline flex items-center gap-1.5 w-max">
+                                        <ul className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                                          {page.sources.map((source: any, sIdx: number) => (
+                                            <li key={sIdx} className="text-sm flex items-center justify-between group hover:bg-white p-1 rounded transition-colors">
+                                              <a href={source.url} target="_blank" rel="noreferrer" className="text-[#282C33] hover:underline flex items-center gap-1.5 truncate">
                                                 <ExternalLink className="w-3.5 h-3.5 shrink-0 text-[#4C535D]" />
-                                                {source.replace(/^https?:\/\/[^\/]+/, '')}
+                                                {source.url.replace(/^https?:\/\/[^\/]+/, '')}
                                               </a>
+                                              <span className="text-xs text-[#4C535D] bg-white border border-[#DFE3E8] px-2 py-0.5 rounded ml-4 truncate max-w-[200px]" title="Anchor Text">
+                                                "{source.anchor}"
+                                              </span>
                                             </li>
                                           ))}
                                         </ul>
@@ -825,7 +884,7 @@ export default function App() {
               {!isRedirectsScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <ArrowRightLeft className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex flex-col flex-1 bg-white rounded-xl shadow-sm border border-[#DFE3E8] overflow-hidden">
@@ -918,7 +977,7 @@ export default function App() {
               {!isLinksScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <Edit3 className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex-1 overflow-auto pb-10">
@@ -979,7 +1038,7 @@ export default function App() {
               {!isBrokenScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <XCircle className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex-1 overflow-auto pb-10">
