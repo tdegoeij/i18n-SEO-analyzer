@@ -10,6 +10,7 @@ export default function App() {
   const [data, setData] = useState<any>({ languages: [], clusters: [], gsc: {} });
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginProgress, setLoginProgress] = useState('Connecting to Google...');
   const [selectedLang, setSelectedLang] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('missing');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -96,6 +97,8 @@ export default function App() {
   const fetchGscData = async (token: string) => {
     setIsLoading(true);
     setAuthError(null);
+    setLoginProgress('Authenticating...');
+    
     try {
       const res = await fetch(`${API_BASE_URL}/api/data`, {
         headers: {
@@ -106,13 +109,45 @@ export default function App() {
       if (!res.ok) {
         throw new Error('Authentication expired or invalid. Please log in again.');
       }
+      if (!res.body) throw new Error("No response body available for streaming");
       
-      const result = await res.json();
-      setData(result);
-      if (result.languages && result.languages.length > 0) {
-        setSelectedLang(result.languages[0]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ""; 
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            
+            if (parsed.error) {
+               throw new Error(parsed.error);
+            }
+            if (parsed.status === 'progress' && parsed.message) {
+               setLoginProgress(parsed.message);
+            }
+            
+            if (parsed.status === 'complete' && parsed.result) {
+               const result = parsed.result;
+               setData(result);
+               if (result.languages && result.languages.length > 0) {
+                 setSelectedLang(result.languages[0]);
+               }
+               setIsConnected(true);
+            }
+          } catch(e) { 
+             console.error("JSON parse error on stream segment", e) 
+          }
+        }
       }
-      setIsConnected(true);
     } catch (error: any) {
       console.error("Failed to fetch data", error);
       setAuthError(error.message);
@@ -449,7 +484,12 @@ export default function App() {
             disabled={isLoading}
             className="w-full bg-[#1071E5] hover:bg-[#0C56B6] text-white font-medium py-3 px-4 rounded-xl transition-all disabled:opacity-70 flex items-center justify-center gap-2 shadow-sm"
           >
-            {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Connect & Analyze"}
+            {isLoading ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                <span>{loginProgress}</span>
+              </>
+            ) : "Connect & Analyze"}
           </button>
         </div>
       </div>
