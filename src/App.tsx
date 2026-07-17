@@ -12,7 +12,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLang, setSelectedLang] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('missing');
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,7 +47,7 @@ export default function App() {
   const [analysisResults, setAnalysisResults] = useState<Record<string, any>>({});
   const [customKeywords, setCustomKeywords] = useState<Record<string, string>>({});
 
-  // CHANGE THIS TO YOUR HEROKU URL WHEN DEPLOYING
+  // CHANGE THIS TO YOUR HEROKU URL
   const API_BASE_URL = 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com/'; 
 
   useEffect(() => {
@@ -58,12 +57,10 @@ export default function App() {
     if (token) {
       localStorage.setItem('gsc_token', token);
       window.history.replaceState({}, document.title, window.location.pathname);
-      setAuthToken(token);
       fetchGscData(token);
     } else {
       const savedToken = localStorage.getItem('gsc_token');
       if (savedToken) {
-        setAuthToken(savedToken);
         fetchGscData(savedToken);
       }
     }
@@ -92,7 +89,6 @@ export default function App() {
 
   const logout = () => {
     localStorage.removeItem('gsc_token');
-    setAuthToken(null);
     setIsConnected(false);
     setData({ languages: [], clusters: [], gsc: {} });
   };
@@ -121,7 +117,6 @@ export default function App() {
       console.error("Failed to fetch data", error);
       setAuthError(error.message);
       localStorage.removeItem('gsc_token');
-      setAuthToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -188,7 +183,7 @@ export default function App() {
         setScanProgress('');
         setScanProgressPercent(0);
         setIsScanning(false);
-      }, 1500); // Wait 1.5s so user sees the 100% completion before it disappears
+      }, 1500);
     }
   };
 
@@ -494,7 +489,6 @@ export default function App() {
         </div>
       </aside>
 
-      {}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative bg-[#F8F9FA]">
         
         <div className="bg-white border-b border-[#DFE3E8] px-8 pt-6 pb-0 shrink-0 z-20 shadow-sm transition-all duration-300">
@@ -651,6 +645,9 @@ export default function App() {
                             <a href={page.localUrl} target="_blank" rel="noreferrer" className="text-[#282C33] hover:underline font-medium flex items-center gap-1 w-max">
                               {page.localUrl.replace(/^https?:\/\/[^\/]+/, '')} <ExternalLink className="w-3 h-3 inline shrink-0" />
                             </a>
+                            <div className="text-xs text-[#4C535D] mt-1.5 flex items-center gap-1">
+                              Original: {page.enUrl.replace(/^https?:\/\/[^\/]+/, '')}
+                            </div>
                           </td>
                           <td className="px-6 py-4 align-middle font-semibold text-[#282C33]">
                             {page.impressions.toLocaleString()}
