@@ -514,7 +514,7 @@ export default function App() {
         </div>
         
         <div className="p-4 flex-1 overflow-y-auto">
-          <div className="text-xs font-semibold text-[#4C535D] uppercase tracking-wider mb-4 px-2">Discovered Markets</div>
+          <div className="text-xs font-semibold text-[#4C535D] uppercase tracking-wider mb-4 px-2">Discovered Languages</div>
           <ul className="space-y-1">
             {data.languages.map((lang: string) => (
               <li key={lang}>
@@ -548,7 +548,7 @@ export default function App() {
               <ArrowRightLeft className="w-4 h-4" /> 301 Redirects
             </button>
             <button onClick={() => setActiveTab('links')} className={`pb-4 px-2 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'links' ? 'border-[#282C33] text-[#282C33]' : 'border-transparent text-[#4C535D] hover:text-[#282C33]'}`}>
-              <Edit3 className="w-4 h-4" /> Link Updates
+              <Edit3 className="w-4 h-4" /> i18n Link Updates
             </button>
             <button onClick={() => setActiveTab('broken')} className={`pb-4 px-2 font-medium text-sm flex items-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'broken' ? 'border-[#282C33] text-[#282C33]' : 'border-transparent text-[#4C535D] hover:text-[#282C33]'}`}>
               <XCircle className="w-4 h-4" /> 404 Pages
@@ -740,7 +740,7 @@ export default function App() {
               {!isInlinksScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <LinkIcon className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex flex-col flex-1 bg-white rounded-xl shadow-sm border border-[#DFE3E8] overflow-hidden">
@@ -828,7 +828,7 @@ export default function App() {
               {!isRedirectsScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <ArrowRightLeft className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex flex-col flex-1 bg-white rounded-xl shadow-sm border border-[#DFE3E8] overflow-hidden">
@@ -921,7 +921,7 @@ export default function App() {
               {!isLinksScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <Edit3 className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex-1 overflow-auto pb-10">
@@ -982,7 +982,7 @@ export default function App() {
               {!isBrokenScanned ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-[#4C535D] bg-white rounded-xl border border-[#DFE3E8] border-dashed">
                   <XCircle className="w-12 h-12 text-[#DFE3E8] mb-4" />
-                  {isScanning ? "Unified batch scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
+                  {isScanning ? "Scan in progress. Data will appear shortly..." : `Click 'Run Full Link Analysis' above to map out all architectural links for ${selectedLang?.toUpperCase()}.`}
                 </div>
               ) : (
                 <div className="flex-1 overflow-auto pb-10">
