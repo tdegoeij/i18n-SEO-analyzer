@@ -448,7 +448,8 @@ export default function App() {
         .map((opp: any, i: number) => ({
           id: `link-${i}`,
           enUrl: opp.enLink,
-          localizedUrls: { [selectedLang?.code]: opp.i18nLink },
+          originalLink: opp.originalLink,
+          localizedUrls: { [selectedLang?.code || '']: opp.i18nLink },
           sourceUrl: opp.source,
           linksToEn: 1 
         }));
@@ -524,7 +525,7 @@ export default function App() {
           <div className="p-8 text-center bg-gradient-to-br from-indigo-600 to-blue-700">
             <Globe2 className="w-16 h-16 text-white mx-auto mb-4" />
             <h1 className="text-3xl font-bold text-white mb-2">i18n Content Analyzer</h1>
-            <p className="text-indigo-100">Automate your international AI & SEO strategy.</p>
+            <p className="text-indigo-100">Automate your international AI & Content strategy.</p>
           </div>
           <div className="p-8 text-center">
             <p className="text-slate-600 mb-8">Connect your Google Search Console to securely import your sitemaps and search data.</p>
@@ -1033,6 +1034,12 @@ export default function App() {
                               <span className="text-red-500 line-through decoration-red-300">{page.enUrl.replace('https://lucid.co', '')}</span>
                               <ChevronRight className="w-4 h-4 text-slate-400 mx-auto rotate-90 my-1" />
                               <span className="text-emerald-600 font-medium">{page.localizedUrls?.[selectedLang?.code || '']?.replace('https://lucid.co', '')}</span>
+                              
+                              {page.originalLink && page.originalLink !== page.enUrl && (
+                                <span className="text-xs text-amber-600 font-medium mt-1">
+                                  (Redirects from: {page.originalLink.replace('https://lucid.co', '')})
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="p-4">
