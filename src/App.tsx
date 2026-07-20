@@ -138,9 +138,7 @@ export default function App() {
   }, []);
 
   const handleLogin = () => {
-    // Basic mock login for display purposes if backend isn't full OAuth
-    setIsAuthenticated(true);
-    fetchBaseData("mock_token");
+    window.location.href = `${API_BASE_URL}/api/auth/login`;
   };
 
   const handleLogout = () => {
