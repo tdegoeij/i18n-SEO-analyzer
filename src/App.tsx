@@ -639,20 +639,22 @@ export default function App() {
             </h2>
             
             {activeTab !== 'llm' && languages.length > 0 && (
-              <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 border border-slate-200">
-                {languages.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => setSelectedLang(lang)}
-                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      selectedLang?.code === lang.code
-                        ? 'bg-white text-indigo-600 shadow-sm border border-slate-200'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                    }`}
-                  >
-                    {lang.name}
-                  </button>
-                ))}
+              <div className="relative group">
+                <select
+                  value={selectedLang?.code || ''}
+                  onChange={(e) => {
+                    const lang = languages.find(l => l.code === e.target.value);
+                    if (lang) setSelectedLang(lang);
+                  }}
+                  className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-4 pr-10 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer shadow-sm group-hover:bg-slate-100"
+                >
+                  {languages.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      Target Language: {lang.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none group-hover:text-indigo-500 transition-colors" />
               </div>
             )}
           </div>
