@@ -726,9 +726,6 @@ export default function App() {
                             <a href={page.localUrl} target="_blank" rel="noreferrer" className="text-[#282C33] hover:underline font-medium flex items-center gap-1 w-max">
                               {page.localUrl.replace(/^https?:\/\/[^\/]+/, '')} <ExternalLink className="w-3 h-3 inline shrink-0" />
                             </a>
-                            <div className="text-xs text-[#4C535D] mt-1.5 flex items-center gap-1">
-                              Original: {page.enUrl.replace(/^https?:\/\/[^\/]+/, '')}
-                            </div>
                           </td>
                           <td className="px-6 py-4 align-middle font-semibold text-[#282C33]">
                             {page.impressions.toLocaleString()}
