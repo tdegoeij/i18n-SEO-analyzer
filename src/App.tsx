@@ -3,7 +3,7 @@ import {
   AlertCircle, CheckCircle2, ChevronRight, ChevronDown, ExternalLink, 
   Globe2, Link as LinkIcon, Search, LogOut, 
   FileText, BrainCircuit, Activity, ArrowRight,
-  ShieldAlert, RefreshCcw, Download, Network
+  ShieldAlert, RefreshCcw, Download, Network, Clock, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 const API_BASE_URL = typeof window !== 'undefined' && 
@@ -26,12 +26,14 @@ export default function App() {
   // Data State - explicitly type languages as an array of Language objects
   const [languages, setLanguages] = useState<Language[]>([]);
   const [clusters, setClusters] = useState<any[]>([]);
+  const [lastmods, setLastmods] = useState<Record<string, string>>({});
   const [gscData, setGscData] = useState<any>({});
   const [scanResults, setScanResults] = useState<any>(null);
 
   // UI State
   const [selectedLang, setSelectedLang] = useState<Language | null>(null);
   const [activeTab, setActiveTab] = useState('llm');
+  const [sortConfig, setSortConfig] = useState<{key: string, direction: 'asc' | 'desc'} | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
@@ -60,10 +62,11 @@ export default function App() {
   };
 
   // Safely gets the array of items for the active tab to prevent indexing compile issues
-  const getActiveTabArray = (): any[] => {
+  const getActiveTabArrayRaw = (): any[] => {
     switch (activeTab) {
       case 'optimizations': return filteredData.optimizations;
       case 'missing': return filteredData.missing;
+      case 'freshness': return filteredData.freshness;
       case 'linking': return filteredData.linking;
       case 'broken': return filteredData.brokenLinks;
       case 'redirects': return filteredData.redirects;
@@ -72,12 +75,37 @@ export default function App() {
     }
   };
 
+  const getActiveTabArray = (): any[] => {
+    let data = [...getActiveTabArrayRaw()];
+    if (sortConfig) {
+      data.sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        
+        // Handle special nested cases
+        if (sortConfig.key === 'localImpressions') {
+          aVal = a.localImpressions?.[selectedLang?.code || ''] || 0;
+          bVal = b.localImpressions?.[selectedLang?.code || ''] || 0;
+        } else if (sortConfig.key === 'lastMod') {
+          aVal = new Date(a.lastMod || (sortConfig.direction === 'asc' ? '9999-12-31' : '1970-01-01')).getTime();
+          bVal = new Date(b.lastMod || (sortConfig.direction === 'asc' ? '9999-12-31' : '1970-01-01')).getTime();
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return data;
+  };
+
   // Maps active tab identifiers to beautiful visual display titles
   const getTabTitle = (): string => {
     switch (activeTab) {
       case 'llm': return 'LLM Content Optimizer';
       case 'optimizations': return 'Keyword Analysis';
       case 'missing': return 'Missing Translations';
+      case 'freshness': return 'Content Freshness';
       case 'linking': return 'Link Updates';
       case 'broken': return '404 Finder';
       case 'redirects': return 'Redirects';
@@ -178,6 +206,7 @@ export default function App() {
               setLanguages(langs);
               if (langs.length > 0) setSelectedLang(langs[0]);
               setClusters(data.result.clusters);
+              setLastmods(data.result.lastmods || {});
               setGscData(data.result.gsc);
             }
           } catch (e) {
@@ -319,6 +348,9 @@ export default function App() {
           analysis.wordCount !== undefined ? analysis.wordCount : 'N/A'
         ];
       });
+    } else if (activeTab === 'freshness') {
+      headers = ['URL', 'Last Updated', 'Days Old', 'Status', 'Action'];
+      rows = data.map(d => [d.url, d.lastMod || 'Unknown', d.daysOld || 'N/A', d.isStale ? 'Stale' : 'Fresh', d.isStale ? 'Update Content' : 'None']);
     } else if (activeTab === 'missing') {
       headers = ['English URL', 'Global Impressions', 'Top Keyword', 'Action'];
       rows = data.map(d => [d.enUrl, d.globalImpressions, d.topKeyword, d.action]);
@@ -349,7 +381,40 @@ export default function App() {
   };
 
   const getFilteredData = () => {
-    if (!selectedLang) return { missing: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
+    if (!selectedLang) return { missing: [], freshness: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
+
+    // Content Freshness
+    const freshness = clusters
+      .filter(c => c[selectedLang?.code])
+      .map((c, i) => {
+        const localUrl = c[selectedLang?.code];
+        // Grab the explicit lastmod from sitemap for this locale, or default to the English one
+        const lastModStr = lastmods[localUrl] || lastmods[c.en] || null;
+        
+        let isStale = false;
+        let daysOld = 0;
+        if (lastModStr) {
+            const diffTime = Math.abs(new Date().getTime() - new Date(lastModStr).getTime());
+            daysOld = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            isStale = daysOld > 90;
+        } else {
+            isStale = true;
+        }
+        
+        return {
+            id: `fresh-${i}`,
+            url: localUrl,
+            lastMod: lastModStr,
+            daysOld,
+            isStale,
+            impressions: gscData[localUrl]?.impressions || 0
+        };
+      });
+      
+    // Sort oldest to newest natively if user hasn't clicked a sort column
+    if (!sortConfig && activeTab === 'freshness') {
+        freshness.sort((a, b) => new Date(a.lastMod || '1970-01-01').getTime() - new Date(b.lastMod || '1970-01-01').getTime());
+    }
 
     // Missing Localized Pages
     const missing = clusters
@@ -426,21 +491,47 @@ export default function App() {
       }));
     }
 
-    return { missing, optimizations, linking, brokenLinks, redirects, inlinks };
+    return { missing, freshness, optimizations, linking, brokenLinks, redirects, inlinks };
   };
 
   const filteredData = getFilteredData();
+  const activeTabArray = getActiveTabArray();
 
   // Pagination Logic
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   
-  const paginatedMissing = filteredData.missing.slice(startIndex, endIndex);
-  const paginatedOptimizations = filteredData.optimizations.slice(startIndex, endIndex);
-  const paginatedRedirects = filteredData.redirects.slice(startIndex, endIndex);
-  const paginatedBrokenLinks = filteredData.brokenLinks.slice(startIndex, endIndex);
-  const paginatedLinking = filteredData.linking.slice(startIndex, endIndex);
-  const paginatedInlinks = filteredData.inlinks.slice(startIndex, endIndex);
+  const paginatedMissing = activeTabArray.slice(startIndex, endIndex);
+  const paginatedFreshness = activeTabArray.slice(startIndex, endIndex);
+  const paginatedOptimizations = activeTabArray.slice(startIndex, endIndex);
+  const paginatedRedirects = activeTabArray.slice(startIndex, endIndex);
+  const paginatedBrokenLinks = activeTabArray.slice(startIndex, endIndex);
+  const paginatedLinking = activeTabArray.slice(startIndex, endIndex);
+  const paginatedInlinks = activeTabArray.slice(startIndex, endIndex);
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'desc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
+        direction = 'asc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const SortableHeader = ({ label, sortKey }: { label: string, sortKey: string }) => (
+    <th 
+        className="p-4 font-semibold cursor-pointer hover:bg-slate-200 transition-colors select-none group"
+        onClick={() => handleSort(sortKey)}
+    >
+        <div className="flex items-center gap-1">
+            {label}
+            {sortConfig?.key === sortKey ? (
+                sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-500" /> : <ArrowDown className="w-3 h-3 text-indigo-500" />
+            ) : (
+                <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-400" />
+            )}
+        </div>
+    </th>
+  );
 
   if (!isAuthenticated) {
     return (
@@ -485,21 +576,28 @@ export default function App() {
         <nav className="flex-1 py-4 flex flex-col gap-1 px-3 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">AI & Content Tools</div>
           <button 
-            onClick={() => { setActiveTab('llm'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('llm'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'llm' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <BrainCircuit className="w-5 h-5" />
             LLM Optimizer
           </button>
           <button 
-            onClick={() => { setActiveTab('optimizations'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('optimizations'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'optimizations' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <Activity className="w-5 h-5" />
             Keyword Analysis
           </button>
           <button 
-            onClick={() => { setActiveTab('missing'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('freshness'); setCurrentPage(1); setSortConfig(null); }}
+            className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'freshness' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
+          >
+            <Clock className="w-5 h-5" />
+            Content Freshness
+          </button>
+          <button 
+            onClick={() => { setActiveTab('missing'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'missing' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <FileText className="w-5 h-5" />
@@ -508,28 +606,28 @@ export default function App() {
 
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2 px-3">Technical SEO</div>
           <button 
-            onClick={() => { setActiveTab('inlinks'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('inlinks'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'inlinks' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <Network className="w-5 h-5" />
             Internal Links
           </button>
           <button 
-            onClick={() => { setActiveTab('linking'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('linking'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'linking' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <LinkIcon className="w-5 h-5" />
             Link Updates
           </button>
           <button 
-            onClick={() => { setActiveTab('broken'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('broken'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'broken' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <ShieldAlert className="w-5 h-5" />
             404 Finder
           </button>
           <button 
-            onClick={() => { setActiveTab('redirects'); setCurrentPage(1); }}
+            onClick={() => { setActiveTab('redirects'); setCurrentPage(1); setSortConfig(null); }}
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'redirects' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <ArrowRight className="w-5 h-5" />
@@ -698,9 +796,30 @@ export default function App() {
                           <div className="mt-0.5">
                             {rec.type === 'success' ? <CheckCircle2 className="w-6 h-6 text-emerald-500" /> : <AlertCircle className="w-6 h-6 text-amber-500" />}
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <h5 className={`font-bold mb-1 ${rec.type === 'success' ? 'text-emerald-900' : 'text-amber-900'}`}>{rec.title}</h5>
                             <p className={rec.type === 'success' ? 'text-emerald-700' : 'text-amber-800'}>{rec.desc}</p>
+                            
+                            {/* Expanded Structured Data Details */}
+                            {rec.details && rec.details.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {rec.details.map((detail: string, i: number) => (
+                                   <span key={i} className="px-2 py-1 text-xs font-mono bg-white border border-slate-200/60 shadow-sm rounded text-slate-700">
+                                     {detail}
+                                   </span>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {/* Expanded Structured Data Errors */}
+                            {rec.errors && rec.errors.length > 0 && (
+                               <div className="mt-3 p-3 bg-red-50/50 border border-red-100 rounded-lg space-y-1">
+                                 <div className="text-xs font-bold text-red-800 mb-2">Detected Issues:</div>
+                                 {rec.errors.map((err: string, i: number) => (
+                                   <div key={i} className="text-xs text-red-600 font-mono break-all">{err}</div>
+                                 ))}
+                               </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -725,7 +844,7 @@ export default function App() {
                     <thead className="text-xs uppercase bg-slate-100 text-slate-500">
                       <tr>
                         <th className="p-4 font-semibold">Localized URL</th>
-                        <th className="p-4 font-semibold">Local Impressions (30d)</th>
+                        <SortableHeader label="Local Impressions (30d)" sortKey="localImpressions" />
                         <th className="p-4 font-semibold">Target Keyword</th>
                         <th className="p-4 font-semibold">On-Page Analysis</th>
                         <th className="p-4 font-semibold">Action</th>
@@ -804,6 +923,67 @@ export default function App() {
               </div>
             )}
 
+            {/* Tab: Content Freshness */}
+            {activeTab === 'freshness' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-indigo-500" />
+                    Content Freshness Check
+                  </h3>
+                  <span className="text-sm text-slate-500">Showing {startIndex + 1}-{Math.min(endIndex, filteredData.freshness.length)} of {filteredData.freshness.length} pages</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="text-xs uppercase bg-slate-100 text-slate-500">
+                      <tr>
+                        <th className="p-4 font-semibold">URL</th>
+                        <SortableHeader label="Impressions (30d)" sortKey="impressions" />
+                        <SortableHeader label="Last Updated" sortKey="lastMod" />
+                        <SortableHeader label="Days Old" sortKey="daysOld" />
+                        <th className="p-4 font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paginatedFreshness.length > 0 ? paginatedFreshness.map((page) => (
+                        <tr key={page.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 max-w-sm truncate">
+                             <a href={page.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                              {page.url.replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
+                            </a>
+                          </td>
+                          <td className="p-4 font-semibold text-slate-700">
+                            {page.impressions?.toLocaleString() || 0}
+                          </td>
+                          <td className="p-4 font-medium text-slate-800">
+                            {page.lastMod ? new Date(page.lastMod).toLocaleDateString() : 'Unknown'}
+                          </td>
+                          <td className="p-4">
+                            <span className={`font-bold ${page.isStale ? 'text-red-500' : 'text-emerald-600'}`}>
+                              {page.lastMod ? `${page.daysOld} days` : 'N/A'}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                             {page.isStale ? (
+                               <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                 Update Content
+                               </span>
+                             ) : (
+                               <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                 <CheckCircle2 className="w-3 h-3" /> Fresh
+                               </span>
+                             )}
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={5} className="p-8 text-center text-slate-400">No content data available.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Tab 3: Missing Localized Content (Content Gaps) */}
             {activeTab === 'missing' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -819,7 +999,7 @@ export default function App() {
                     <thead className="text-xs uppercase bg-slate-100 text-slate-500">
                       <tr>
                         <th className="p-4 font-semibold">English URL</th>
-                        <th className="p-4 font-semibold">Global Impressions (30d)</th>
+                        <SortableHeader label="Global Impressions (30d)" sortKey="globalImpressions" />
                         <th className="p-4 font-semibold">Top English Keyword</th>
                         <th className="p-4 font-semibold">Action</th>
                       </tr>
@@ -919,7 +1099,7 @@ export default function App() {
                     <thead className="text-xs uppercase bg-slate-100 text-slate-500">
                       <tr>
                         <th className="p-4 font-semibold">Broken URL</th>
-                        <th className="p-4 font-semibold">Occurrences</th>
+                        <SortableHeader label="Occurrences" sortKey="brokenLinksCount" />
                         <th className="p-4 font-semibold">Action</th>
                       </tr>
                     </thead>
@@ -1058,8 +1238,8 @@ export default function App() {
                     <thead className="text-xs uppercase bg-slate-100 text-slate-500">
                       <tr>
                         <th className="p-4 font-semibold">Destination URL</th>
-                        <th className="p-4 font-semibold">Total Inlinks</th>
-                        <th className="p-4 font-semibold">Unique Anchors</th>
+                        <SortableHeader label="Total Inlinks" sortKey="inlinks" />
+                        <SortableHeader label="Unique Anchors" sortKey="uniqueInlinks" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
