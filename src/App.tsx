@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { 
-  AlertCircle, CheckCircle2, ChevronRight, ExternalLink, 
+  AlertCircle, CheckCircle2, ChevronRight, ChevronDown, ExternalLink, 
   Globe2, Link as LinkIcon, Search, LogOut, 
   FileText, BrainCircuit, Activity, ArrowRight,
   ShieldAlert, RefreshCcw, Download
@@ -52,6 +52,13 @@ export default function App() {
   const [onPageResults, setOnPageResults] = useState<Record<string, any>>({});
   const [analyzingRows, setAnalyzingRows] = useState<Record<string, boolean>>({});
 
+  // Expanded Rows State for 404s and Redirects
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   // Safely gets the array of items for the active tab to prevent indexing compile issues
   const getActiveTabArray = (): any[] => {
     switch (activeTab) {
@@ -72,8 +79,19 @@ export default function App() {
       case 'missing': return 'Missing Translations';
       case 'linking': return 'Link Updates';
       case 'broken': return '404 Finder';
-      case 'redirects': return 'Redirect Chains';
+      case 'redirects': return 'Redirects';
       default: return activeTab;
+    }
+  };
+
+  // Helper to strictly ensure we are evaluating the English base URL
+  const isEnglishUrl = (url: string) => {
+    if (!url) return false;
+    try {
+      const path = new URL(url).pathname;
+      return !languages.some(lang => path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`);
+    } catch {
+      return true;
     }
   };
 
@@ -330,7 +348,7 @@ export default function App() {
 
     // Missing Localized Pages
     const missing = clusters
-      .filter(c => c.en && !c[selectedLang?.code])
+      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code])
       .map((c, i) => ({
         id: `missing-${i}`,
         enUrl: c.en,
@@ -364,13 +382,15 @@ export default function App() {
 
     if (scanResults) {
       // Internal Link Opportunities
-      linking = scanResults.opportunities.map((opp: any, i: number) => ({
-        id: `link-${i}`,
-        enUrl: opp.enLink,
-        localizedUrls: { [selectedLang?.code]: opp.i18nLink },
-        sourceUrl: opp.source,
-        linksToEn: 1 
-      }));
+      linking = scanResults.opportunities
+        .filter((opp: any) => isEnglishUrl(opp.enLink))
+        .map((opp: any, i: number) => ({
+          id: `link-${i}`,
+          enUrl: opp.enLink,
+          localizedUrls: { [selectedLang?.code]: opp.i18nLink },
+          sourceUrl: opp.source,
+          linksToEn: 1 
+        }));
 
       // Broken Links
       const brokenMap = new Map();
@@ -379,15 +399,22 @@ export default function App() {
           brokenMap.set(bl.brokenLink, {
             id: `broken-${bl.brokenLink}`,
             enUrl: bl.brokenLink,
-            localizedUrls: { [selectedLang?.code]: bl.source },
+            sources: [],
             brokenLinksCount: 0
           });
         }
-        brokenMap.get(bl.brokenLink).brokenLinksCount += 1;
+        const item = brokenMap.get(bl.brokenLink);
+        if (!item.sources.includes(bl.source)) {
+          item.sources.push(bl.source);
+        }
+        item.brokenLinksCount += 1;
       });
       brokenLinks = Array.from(brokenMap.values());
 
-      redirects = scanResults.redirects || [];
+      redirects = (scanResults.redirects || []).map((r: any, i: number) => ({
+        ...r,
+        id: `redirect-${i}`
+      }));
       inlinks = scanResults.inlinks || [];
     }
 
@@ -490,7 +517,7 @@ export default function App() {
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'redirects' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <ArrowRight className="w-5 h-5" />
-            Redirect Chains
+            Redirects
           </button>
         </nav>
 
@@ -882,17 +909,39 @@ export default function App() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {paginatedBrokenLinks.length > 0 ? paginatedBrokenLinks.map((page) => (
-                        <tr key={page.id} className="hover:bg-red-50/50 transition-colors">
-                          <td className="p-4 font-medium text-red-600 truncate max-w-sm">
-                            {page.enUrl}
-                          </td>
-                          <td className="p-4 truncate max-w-sm text-slate-500">
-                            {page.localizedUrls?.[selectedLang?.code || '']}
-                          </td>
-                          <td className="p-4">
-                            <span className="font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{page.brokenLinksCount}</span>
-                          </td>
-                        </tr>
+                        <Fragment key={page.id}>
+                          <tr 
+                            onClick={() => toggleRow(page.id)}
+                            className="hover:bg-red-50/50 transition-colors cursor-pointer"
+                          >
+                            <td className="p-4 font-medium text-red-600 truncate max-w-sm flex items-center gap-2">
+                              {expandedRows[page.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                              <span className="truncate">{page.enUrl}</span>
+                            </td>
+                            <td className="p-4 text-slate-500">
+                              {page.sources.length} page{page.sources.length !== 1 ? 's' : ''}
+                            </td>
+                            <td className="p-4">
+                              <span className="font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{page.brokenLinksCount}</span>
+                            </td>
+                          </tr>
+                          {expandedRows[page.id] && (
+                            <tr className="bg-red-50/20">
+                              <td colSpan={3} className="p-4 pl-12">
+                                <div className="text-sm font-semibold text-slate-700 mb-2">Found on pages:</div>
+                                <ul className="list-disc list-inside space-y-1.5 text-slate-600 text-sm">
+                                  {page.sources.map((src: string, idx: number) => (
+                                    <li key={idx} className="truncate">
+                                      <a href={src} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                        {src.replace('https://lucid.co', '')}
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       )) : (
                         <tr>
                           <td colSpan={3} className="p-8 text-center text-slate-500">
@@ -926,20 +975,42 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {paginatedRedirects.length > 0 ? paginatedRedirects.map((redirect: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-amber-50/30 transition-colors">
-                          <td className="p-4 text-slate-500 line-through decoration-slate-300 max-w-xs truncate">
-                            {redirect.originalUrl}
-                          </td>
-                          <td className="p-4 font-medium text-emerald-600 max-w-xs truncate">
-                            {redirect.destinationUrl}
-                          </td>
-                          <td className="p-4">
-                             <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-1 rounded">
-                               {redirect.statusCode}
-                             </span>
-                          </td>
-                        </tr>
+                      {paginatedRedirects.length > 0 ? paginatedRedirects.map((redirect: any) => (
+                        <Fragment key={redirect.id}>
+                          <tr 
+                            onClick={() => toggleRow(redirect.id)}
+                            className="hover:bg-amber-50/30 transition-colors cursor-pointer"
+                          >
+                            <td className="p-4 text-slate-500 line-through decoration-slate-300 max-w-xs truncate flex items-center gap-2">
+                              {expandedRows[redirect.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                              <span className="truncate">{redirect.originalUrl}</span>
+                            </td>
+                            <td className="p-4 font-medium text-emerald-600 max-w-xs truncate">
+                              {redirect.destinationUrl}
+                            </td>
+                            <td className="p-4">
+                               <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-1 rounded">
+                                 {redirect.statusCode}
+                               </span>
+                            </td>
+                          </tr>
+                          {expandedRows[redirect.id] && (
+                            <tr className="bg-amber-50/10">
+                              <td colSpan={3} className="p-4 pl-12">
+                                <div className="text-sm font-semibold text-slate-700 mb-2">Found on pages:</div>
+                                <ul className="list-disc list-inside space-y-1.5 text-slate-600 text-sm">
+                                  {redirect.sources?.map((src: string, idx: number) => (
+                                    <li key={idx} className="truncate">
+                                      <a href={src} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                        {src.replace('https://lucid.co', '')}
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       )) : (
                         <tr>
                           <td colSpan={3} className="p-8 text-center text-slate-500">
