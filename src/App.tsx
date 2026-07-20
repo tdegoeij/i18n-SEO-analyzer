@@ -3,7 +3,7 @@ import {
   AlertCircle, CheckCircle2, ChevronRight, ExternalLink, 
   Globe2, Link as LinkIcon, Search, LogOut, 
   FileText, BrainCircuit, Activity, ArrowRight,
-  ShieldAlert, RefreshCcw
+  ShieldAlert, RefreshCcw, Download
 } from 'lucide-react';
 
 const API_BASE_URL = typeof window !== 'undefined' && 
@@ -47,6 +47,11 @@ export default function App() {
   const [aisoResult, setAisoResult] = useState<any>(null);
   const [isAisoLoading, setIsAisoLoading] = useState(false);
 
+  // On-Page Analysis State
+  const [customKeywords, setCustomKeywords] = useState<Record<string, string>>({});
+  const [onPageResults, setOnPageResults] = useState<Record<string, any>>({});
+  const [analyzingRows, setAnalyzingRows] = useState<Record<string, boolean>>({});
+
   // Safely gets the array of items for the active tab to prevent indexing compile issues
   const getActiveTabArray = (): any[] => {
     switch (activeTab) {
@@ -64,7 +69,7 @@ export default function App() {
     switch (activeTab) {
       case 'llm': return 'LLM Content Optimizer';
       case 'optimizations': return 'Keyword Analysis';
-      case 'missing': return 'Content Gaps';
+      case 'missing': return 'Missing Translations';
       case 'linking': return 'Link Updates';
       case 'broken': return '404 Finder';
       case 'redirects': return 'Redirect Chains';
@@ -249,6 +254,77 @@ export default function App() {
     }
   };
 
+  const runOnPageAnalysis = async (pageId: string, url: string, defaultKeyword: string) => {
+    const keywordToAnalyze = customKeywords[pageId] || defaultKeyword;
+    if (!keywordToAnalyze || keywordToAnalyze === 'N/A') return;
+
+    setAnalyzingRows(prev => ({ ...prev, [pageId]: true }));
+    try {
+      const targetUrl = new URL(`${API_BASE_URL}/api/analyze_onpage`);
+      targetUrl.searchParams.append('url', url);
+      targetUrl.searchParams.append('keyword', keywordToAnalyze);
+
+      const response = await fetch(targetUrl.toString());
+      if (!response.ok) throw new Error('Analysis failed');
+      
+      const data = await response.json();
+      setOnPageResults(prev => ({ ...prev, [pageId]: data }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalyzingRows(prev => ({ ...prev, [pageId]: false }));
+    }
+  };
+
+  const handleExportCSV = () => {
+    const data = getActiveTabArray();
+    if (!data || data.length === 0) return;
+
+    let headers: string[] = [];
+    let rows: any[][] = [];
+
+    if (activeTab === 'optimizations') {
+      headers = ['URL', 'Impressions', 'Analyzed Keyword', 'In Title', 'In H1', 'In H2', 'Keyword Occurrences'];
+      rows = data.map(d => {
+        const url = d.localizedUrls?.[selectedLang?.code || ''] || d.enUrl;
+        const kw = customKeywords[d.id] || d.localTopKeyword?.[selectedLang?.code || ''] || 'N/A';
+        const analysis = onPageResults[d.id] || {};
+        return [
+          url, 
+          d.localImpressions?.[selectedLang?.code || ''] || 0, 
+          kw,
+          analysis.inTitle !== undefined ? analysis.inTitle : 'N/A',
+          analysis.inH1 !== undefined ? analysis.inH1 : 'N/A',
+          analysis.inH2 !== undefined ? analysis.inH2 : 'N/A',
+          analysis.wordCount !== undefined ? analysis.wordCount : 'N/A'
+        ];
+      });
+    } else if (activeTab === 'missing') {
+      headers = ['English URL', 'Global Impressions', 'Top Keyword', 'Action'];
+      rows = data.map(d => [d.enUrl, d.globalImpressions, d.topKeyword, d.action]);
+    } else if (activeTab === 'linking') {
+      headers = ['Source URL', 'Current English Link', 'Recommended Localized Link'];
+      rows = data.map(d => [d.sourceUrl, d.enUrl, d.localizedUrls?.[selectedLang?.code || ''] || '']);
+    } else if (activeTab === 'broken') {
+      headers = ['Broken URL', 'Found On', 'Occurrences'];
+      rows = data.map(d => [d.enUrl, d.localizedUrls?.[selectedLang?.code || ''] || '', d.brokenLinksCount]);
+    } else if (activeTab === 'redirects') {
+      headers = ['Original URL', 'Destination', 'Status Code'];
+      rows = data.map(d => [d.originalUrl, d.destinationUrl, d.statusCode]);
+    }
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `i18n-seo-${activeTab}-${selectedLang?.code || 'export'}.csv`;
+    link.click();
+  };
+
   const getFilteredData = () => {
     if (!selectedLang) return { missing: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
 
@@ -391,7 +467,7 @@ export default function App() {
             className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'missing' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}
           >
             <FileText className="w-5 h-5" />
-            Content Gaps
+            Missing Translations
           </button>
 
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2 px-3">Technical SEO</div>
@@ -457,21 +533,31 @@ export default function App() {
           
           {/* Scan Actions */}
           {activeTab !== 'llm' && (
-            <button 
-              onClick={runFullScan}
-              disabled={isLoading || isConnecting}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-sm
-                ${(isLoading || isConnecting) 
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                  : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow'}`}
-            >
-              {isLoading || isConnecting ? (
-                <RefreshCcw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
-              {isLoading || isConnecting ? 'Processing...' : 'Run Deep Scan'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleExportCSV}
+                disabled={getActiveTabArray().length === 0}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all shadow-sm bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+              <button 
+                onClick={runFullScan}
+                disabled={isLoading || isConnecting}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all shadow-sm
+                  ${(isLoading || isConnecting) 
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow'}`}
+              >
+                {isLoading || isConnecting ? (
+                  <RefreshCcw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                {isLoading || isConnecting ? 'Processing...' : 'Run Deep Scan'}
+              </button>
+            </div>
           )}
         </header>
 
@@ -597,34 +683,77 @@ export default function App() {
                       <tr>
                         <th className="p-4 font-semibold">Localized URL</th>
                         <th className="p-4 font-semibold">Local Impressions (30d)</th>
-                        <th className="p-4 font-semibold">Top Ranked Keyword</th>
+                        <th className="p-4 font-semibold">Target Keyword</th>
+                        <th className="p-4 font-semibold">On-Page Analysis</th>
                         <th className="p-4 font-semibold">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {paginatedOptimizations.length > 0 ? paginatedOptimizations.map((page) => (
-                        <tr key={page.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-4 max-w-xs truncate">
-                             <a href={page.localizedUrls?.[selectedLang?.code || ''] || '#'} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
-                              {(page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl).replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
-                            </a>
-                          </td>
-                          <td className="p-4">
-                            <span className="font-semibold text-slate-700">{page.localImpressions?.[selectedLang?.code || '']?.toLocaleString() || 0}</span>
-                          </td>
-                          <td className="p-4">
-                            <span className="font-medium text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded">
-                              "{page.localTopKeyword?.[selectedLang?.code || ''] || 'N/A'}"
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                              {page.recommendedAction || 'Analyze'}
-                            </span>
-                          </td>
-                        </tr>
-                      )) : (
-                        <tr><td colSpan={4} className="p-8 text-center text-slate-400">No data available for this language.</td></tr>
+                      {paginatedOptimizations.length > 0 ? paginatedOptimizations.map((page) => {
+                        const localUrl = page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl;
+                        const defaultKw = page.localTopKeyword?.[selectedLang?.code || ''] || 'N/A';
+                        const currentKw = customKeywords[page.id] !== undefined ? customKeywords[page.id] : defaultKw;
+                        const analysis = onPageResults[page.id];
+                        const isAnalyzing = analyzingRows[page.id];
+
+                        return (
+                          <tr key={page.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 max-w-xs truncate">
+                               <a href={localUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                                {localUrl.replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
+                              </a>
+                            </td>
+                            <td className="p-4">
+                              <span className="font-semibold text-slate-700">{page.localImpressions?.[selectedLang?.code || '']?.toLocaleString() || 0}</span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex flex-col gap-2">
+                                <input 
+                                  type="text" 
+                                  value={currentKw === 'N/A' ? '' : currentKw}
+                                  onChange={(e) => setCustomKeywords(prev => ({ ...prev, [page.id]: e.target.value }))}
+                                  placeholder="Enter keyword..."
+                                  className="px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none w-48"
+                                />
+                                {defaultKw !== 'N/A' && currentKw !== defaultKw && (
+                                  <span className="text-[10px] text-slate-400">GSC Top: {defaultKw}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              {analysis ? (
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                  <span className={`px-2 py-1 rounded border ${analysis.inTitle ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                    Title: {analysis.inTitle ? 'Yes' : 'No'}
+                                  </span>
+                                  <span className={`px-2 py-1 rounded border ${analysis.inH1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                    H1: {analysis.inH1 ? 'Yes' : 'No'}
+                                  </span>
+                                  <span className={`px-2 py-1 rounded border ${analysis.inH2 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                    H2: {analysis.inH2 ? 'Yes' : 'No'}
+                                  </span>
+                                  <span className="px-2 py-1 rounded border bg-slate-50 text-slate-700 border-slate-200 font-mono">
+                                    Matches: {analysis.wordCount}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">Not analyzed</span>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <button 
+                                onClick={() => runOnPageAnalysis(page.id, localUrl, defaultKw)}
+                                disabled={isAnalyzing || (!currentKw || currentKw === 'N/A')}
+                                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                              >
+                                {isAnalyzing ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                                Analyze
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr><td colSpan={5} className="p-8 text-center text-slate-400">No data available for this language.</td></tr>
                       )}
                     </tbody>
                   </table>
