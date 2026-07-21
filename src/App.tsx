@@ -535,7 +535,7 @@ export default function App() {
       brokenLinks = Array.from(brokenMap.values());
 
       redirects = (scanResults.redirects || [])
-        .filter((r: any) => !isOtherLangUrl(r.originalUrl)) // Filter out foreign language redirects
+        .filter((r: any) => !isOtherLangUrl(r.originalUrl) && r.sources && r.sources.length > 0) // Filter out foreign language & sitemap-only redirects
         .map((r: any, i: number) => ({
           ...r,
           id: `redirect-${i}`
