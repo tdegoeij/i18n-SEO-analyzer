@@ -26,8 +26,10 @@ export default function App() {
   const [clusters, setClusters] = useState<any[]>([]);
   const [lastmods, setLastmods] = useState<Record<string, string>>({});
   const [gscData, setGscData] = useState<any>({});
-  const [scanResults, setScanResults] = useState<any>(null);
-  const [lastScanDate, setLastScanDate] = useState<Date | null>(null);
+  
+  // Store results mapped by language code to persist across dropdown switches
+  const [scanResultsMap, setScanResultsMap] = useState<Record<string, any>>({});
+  const [lastScanDatesMap, setLastScanDatesMap] = useState<Record<string, string>>({});
 
   // UI State
   const [selectedLang, setSelectedLang] = useState<Language | null>(null);
@@ -37,6 +39,11 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState('');
+
+  // Derived state for the currently selected language
+  const scanResults = selectedLang ? scanResultsMap[selectedLang.code] : null;
+  const lastScanDateStr = selectedLang ? lastScanDatesMap[selectedLang.code] : null;
+  const lastScanDate = lastScanDateStr ? new Date(lastScanDateStr) : null;
   
   // Pagination & Filter State
   const [currentPage, setCurrentPage] = useState(1);
@@ -180,16 +187,47 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('gsc_token');
+    sessionStorage.removeItem('seoBaseData');
+    sessionStorage.removeItem('seoScanResults');
     setIsAuthenticated(false);
     setLanguages([]);
     setClusters([]);
     setGscData({});
-    setScanResults(null);
-    setLastScanDate(null);
+    setScanResultsMap({});
+    setLastScanDatesMap({});
     setSelectedLang(null);
   };
 
   const fetchBaseData = async (authToken: string) => {
+    // 1. Check if we already have this data cached in the browser for this session
+    try {
+      const cachedBase = sessionStorage.getItem('seoBaseData');
+      const cachedScans = sessionStorage.getItem('seoScanResults');
+      
+      if (cachedBase) {
+        const parsed = JSON.parse(cachedBase);
+        setLanguages(parsed.languages || []);
+        setClusters(parsed.clusters || []);
+        setLastmods(parsed.lastmods || {});
+        setGscData(parsed.gscData || {});
+        
+        if (parsed.languages?.length > 0) {
+          setSelectedLang(parsed.languages[0]);
+        }
+        
+        if (cachedScans) {
+          const parsedScans = JSON.parse(cachedScans);
+          setScanResultsMap(parsedScans.scans || {});
+          setLastScanDatesMap(parsedScans.dates || {});
+        }
+        
+        setIsConnecting(false);
+        return; // Exit early! Data loaded instantly from cache.
+      }
+    } catch (e) {
+      console.warn("Could not load from cache", e);
+    }
+
     setIsConnecting(true);
     setError('');
     setProgressMsg('Connecting to Google...');
@@ -238,6 +276,18 @@ export default function App() {
               setClusters(data.result.clusters);
               setLastmods(data.result.lastmods || {});
               setGscData(data.result.gsc);
+              
+              // Save to SessionStorage so it survives a page refresh
+              try {
+                sessionStorage.setItem('seoBaseData', JSON.stringify({
+                  languages: langs,
+                  clusters: data.result.clusters,
+                  lastmods: data.result.lastmods || {},
+                  gscData: data.result.gsc
+                }));
+              } catch (e) {
+                console.warn("Base data too large to cache in browser memory.");
+              }
             }
           } catch (e: any) {
             console.error("Error parsing chunk", e);
@@ -259,7 +309,6 @@ export default function App() {
     setError('');
     setProgress(0);
     setProgressMsg('Initializing scan...');
-    setScanResults(null);
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/scan_all`, {
@@ -297,8 +346,23 @@ export default function App() {
             if (data.progress) setProgress(data.progress);
             if (data.message) setProgressMsg(data.message);
             if (data.result) {
-              setScanResults(data.result);
-              setLastScanDate(new Date());
+              const currentDate = new Date().toISOString();
+              
+              // Update state maps
+              setScanResultsMap(prev => ({ ...prev, [selectedLang.code]: data.result }));
+              setLastScanDatesMap(prev => ({ ...prev, [selectedLang.code]: currentDate }));
+              
+              // Save to cache
+              try {
+                const nextScans = { ...scanResultsMap, [selectedLang.code]: data.result };
+                const nextDates = { ...lastScanDatesMap, [selectedLang.code]: currentDate };
+                sessionStorage.setItem('seoScanResults', JSON.stringify({
+                  scans: nextScans,
+                  dates: nextDates
+                }));
+              } catch (e) {
+                console.warn("Scan results too large to cache in browser memory.");
+              }
             }
           } catch (e: any) {
             console.error("Error parsing scan chunk", e);
@@ -602,8 +666,8 @@ export default function App() {
                     const lang = languages.find(l => l.code === e.target.value);
                     if (lang) {
                       setSelectedLang(lang);
-                      setScanResults(null);
-                      setLastScanDate(null);
+                      // We removed the setScanResults(null) wipe here! 
+                      // It now safely retains the data when you switch back.
                       setCurrentPage(1);
                     }
                   }}
