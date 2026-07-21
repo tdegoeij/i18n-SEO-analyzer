@@ -590,7 +590,7 @@ export default function App() {
               {scanResults && ['linking', 'broken', 'redirects', 'inlinks'].includes(activeTab) && (
                 <div className="text-right mr-2 hidden lg:block">
                   <p className="text-xs font-medium text-slate-500 flex items-center justify-end gap-1">
-                    <Clock className="w-3.5 h-3.5" /> Data from last scan {lastScanDate ? `(${lastScanDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})` : ''}
+                    <Clock className="w-3.5 h-3.5" /> Last scan {lastScanDate ? lastScanDate.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Click "Run Deep Scan" to refresh database</p>
                 </div>
