@@ -489,6 +489,20 @@ export default function App() {
     let inlinks: any[] = [];
 
     if (scanResults) {
+      // Helper to filter out language switcher noise (e.g. /de/ links in an /nl/ scan)
+      const isOtherLangUrl = (url: string) => {
+        if (!selectedLang || !url) return false;
+        try {
+          const path = new URL(url).pathname;
+          return languages.some(lang => 
+            lang.code !== selectedLang.code && 
+            (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
+          );
+        } catch {
+          return false;
+        }
+      };
+
       linking = scanResults.opportunities
         .filter((opp: any) => isEnglishUrl(opp.enLink))
         .map((opp: any, i: number) => ({
@@ -502,6 +516,8 @@ export default function App() {
 
       const brokenMap = new Map();
       scanResults.brokenLinks?.forEach((bl: any) => {
+        if (isOtherLangUrl(bl.brokenLink)) return; // Filter out foreign language 404s
+
         if (!brokenMap.has(bl.brokenLink)) {
           brokenMap.set(bl.brokenLink, {
             id: `broken-${bl.brokenLink}`,
@@ -518,15 +534,19 @@ export default function App() {
       });
       brokenLinks = Array.from(brokenMap.values());
 
-      redirects = (scanResults.redirects || []).map((r: any, i: number) => ({
-        ...r,
-        id: `redirect-${i}`
-      }));
+      redirects = (scanResults.redirects || [])
+        .filter((r: any) => !isOtherLangUrl(r.originalUrl)) // Filter out foreign language redirects
+        .map((r: any, i: number) => ({
+          ...r,
+          id: `redirect-${i}`
+        }));
       
-      inlinks = (scanResults.inlinks || []).map((link: any, i: number) => ({
-        ...link,
-        id: `inlink-${i}`
-      }));
+      inlinks = (scanResults.inlinks || [])
+        .filter((link: any) => !isOtherLangUrl(link.url)) // Filter out foreign language inlinks
+        .map((link: any, i: number) => ({
+          ...link,
+          id: `inlink-${i}`
+        }));
     }
 
     return { missing, freshness, optimizations, linking, brokenLinks, redirects, inlinks };
