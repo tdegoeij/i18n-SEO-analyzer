@@ -1203,24 +1203,30 @@ export default function App() {
               </div>
             )}
 
-            {}
-            {activeTab !== 'llm' && getActiveTabArray().length > itemsPerPage && (
-               <div className="flex justify-center mt-6">
+            {/* Pagination UI - Using cached activeTabArray for stability */}
+            {activeTab !== 'llm' && activeTabArray.length > itemsPerPage && (
+               <div className="flex justify-center mt-6 mb-8">
                  <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                    <button 
-                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                     onClick={() => {
+                         setCurrentPage(p => Math.max(1, p - 1));
+                         document.querySelector('.overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
+                     }}
                      disabled={currentPage === 1}
-                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-r border-slate-200"
+                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-r border-slate-200 transition-colors"
                    >
                      Previous
                    </button>
                    <span className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50">
-                     Page {currentPage} of {Math.ceil(getActiveTabArray().length / itemsPerPage)}
+                     Page {currentPage} of {Math.ceil(activeTabArray.length / itemsPerPage)}
                    </span>
                    <button 
-                     onClick={() => setCurrentPage(p => p + 1)}
-                     disabled={currentPage === Math.ceil(getActiveTabArray().length / itemsPerPage)}
-                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-l border-slate-200"
+                     onClick={() => {
+                         setCurrentPage(p => p + 1);
+                         document.querySelector('.overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
+                     }}
+                     disabled={currentPage === Math.ceil(activeTabArray.length / itemsPerPage)}
+                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-l border-slate-200 transition-colors"
                    >
                      Next
                    </button>
