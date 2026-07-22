@@ -3,7 +3,7 @@ import {
   AlertCircle, CheckCircle2, ChevronRight, ChevronDown, ExternalLink, 
   Globe2, Link as LinkIcon, Search, LogOut, 
   FileText, BrainCircuit, Activity, ArrowRight,
-  ShieldAlert, RefreshCcw, Network, Clock, ArrowUpDown, ArrowUp, ArrowDown, Download
+  ShieldAlert, RefreshCcw, Network, Clock, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 const API_BASE_URL = typeof window !== 'undefined' && 
@@ -26,10 +26,8 @@ export default function App() {
   const [clusters, setClusters] = useState<any[]>([]);
   const [lastmods, setLastmods] = useState<Record<string, string>>({});
   const [gscData, setGscData] = useState<any>({});
-  
-  // Database Caching Maps
-  const [scanResultsMap, setScanResultsMap] = useState<Record<string, any>>({});
-  const [lastScanDatesMap, setLastScanDatesMap] = useState<Record<string, string>>({});
+  const [scanResults, setScanResults] = useState<any>(null);
+  const [lastScanDate, setLastScanDate] = useState<Date | null>(null);
 
   // UI State
   const [selectedLang, setSelectedLang] = useState<Language | null>(null);
@@ -46,24 +44,22 @@ export default function App() {
   const [minImpressions, setMinImpressions] = useState<number | ''>('');
   const itemsPerPage = 100;
 
-  // AISO State
+  // AISO State (LLM Optimizer)
   const [aisoUrl, setAisoUrl] = useState('');
   const [aisoResult, setAisoResult] = useState<any>(null);
   const [isAisoLoading, setIsAisoLoading] = useState(false);
 
-  // On-Page State
+  // On-Page Analysis State
   const [customKeywords, setCustomKeywords] = useState<Record<string, string>>({});
   const [onPageResults, setOnPageResults] = useState<Record<string, any>>({});
   const [analyzingRows, setAnalyzingRows] = useState<Record<string, boolean>>({});
+
+  // Expanded Rows State for 404s and Redirects
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
-
-  const scanResults = selectedLang ? scanResultsMap[selectedLang.code] : null;
-  const lastScanDateStr = selectedLang ? lastScanDatesMap[selectedLang.code] : null;
-  const lastScanDate = lastScanDateStr ? new Date(lastScanDateStr) : null;
 
   const getActiveTabArrayRaw = (): any[] => {
     switch (activeTab) {
@@ -81,6 +77,7 @@ export default function App() {
   const getActiveTabArray = (): any[] => {
     let data = [...getActiveTabArrayRaw()];
 
+    // Apply URL Filter
     if (urlFilter.trim() !== '') {
       const lowerFilter = urlFilter.toLowerCase();
       data = data.filter(item => {
@@ -98,6 +95,7 @@ export default function App() {
       });
     }
 
+    // Apply Impressions Filter
     if (minImpressions !== '') {
       const minImp = Number(minImpressions);
       data = data.filter(item => {
@@ -158,19 +156,6 @@ export default function App() {
     }
   };
 
-  const isOtherLangUrl = (url: string) => {
-    if (!selectedLang || !url) return false;
-    try {
-      const path = new URL(url).pathname;
-      return languages.some(lang => 
-        lang.code !== selectedLang.code && 
-        (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
-      );
-    } catch {
-      return false;
-    }
-  };
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
@@ -199,18 +184,18 @@ export default function App() {
     setLanguages([]);
     setClusters([]);
     setGscData({});
-    setScanResultsMap({});
-    setLastScanDatesMap({});
+    setScanResults(null);
+    setLastScanDate(null);
     setSelectedLang(null);
   };
 
-  const fetchBaseData = async (authToken: string, forceRefresh: boolean = false) => {
+  const fetchBaseData = async (authToken: string) => {
     setIsConnecting(true);
     setError('');
-    setProgressMsg('Fetching from database...');
+    setProgressMsg('Connecting to Google...');
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/data?force_refresh=${forceRefresh}`, {
+      const response = await fetch(`${API_BASE_URL}/api/data`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       
@@ -230,24 +215,7 @@ export default function App() {
       let jsonStr = '';
       while (true) {
         const { value, done } = await reader.read();
-        
-        if (done) {
-          if (jsonStr.trim()) {
-            try {
-              const data = JSON.parse(jsonStr);
-              if (data.status === 'progress') setProgressMsg(data.message);
-              if (data.status === 'complete') {
-                const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-                setLanguages(langs);
-                if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
-                setClusters(data.result.clusters);
-                setLastmods(data.result.lastmods || {});
-                setGscData(data.result.gsc);
-              }
-            } catch (e) { console.error("Final chunk parse error", e); }
-          }
-          break;
-        }
+        if (done) break;
         
         jsonStr += decoder.decode(value, { stream: true });
         const lines = jsonStr.split('\n');
@@ -266,13 +234,14 @@ export default function App() {
             if (data.status === 'complete') {
               const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
               setLanguages(langs);
-              if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
+              if (langs.length > 0) setSelectedLang(langs[0]);
               setClusters(data.result.clusters);
               setLastmods(data.result.lastmods || {});
               setGscData(data.result.gsc);
             }
           } catch (e: any) {
             console.error("Error parsing chunk", e);
+            throw e;
           }
         }
         jsonStr = lines[lines.length - 1];
@@ -290,18 +259,19 @@ export default function App() {
     setError('');
     setProgress(0);
     setProgressMsg('Initializing scan...');
+    setScanResults(null);
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/scan_all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          siteUrl: "https://lucid.co/", // Fixed schema key match!
-          targetLang: selectedLang.code
+          target_lang: selectedLang.code,
+          clusters: clusters
         })
       });
 
-      if (!response.ok) throw new Error('Scan failed to start. (422 Unprocessable Entity = Schema Mismatch)');
+      if (!response.ok) throw new Error('Scan failed to start.');
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -311,22 +281,7 @@ export default function App() {
       let jsonStr = '';
       while (true) {
         const { value, done } = await reader.read();
-        
-        if (done) {
-          if (jsonStr.trim()) {
-            try {
-              const data = JSON.parse(jsonStr);
-              if (data.progress) setProgress(data.progress);
-              if (data.message) setProgressMsg(data.message);
-              if (data.result) {
-                const currentDate = new Date().toISOString();
-                setScanResultsMap(prev => ({ ...prev, [selectedLang?.code || '']: data.result }));
-                setLastScanDatesMap(prev => ({ ...prev, [selectedLang?.code || '']: currentDate }));
-              }
-            } catch(e) { console.error("Final chunk parse error", e); }
-          }
-          break;
-        }
+        if (done) break;
         
         jsonStr += decoder.decode(value, { stream: true });
         const lines = jsonStr.split('\n');
@@ -342,12 +297,12 @@ export default function App() {
             if (data.progress) setProgress(data.progress);
             if (data.message) setProgressMsg(data.message);
             if (data.result) {
-              const currentDate = new Date().toISOString();
-              setScanResultsMap(prev => ({ ...prev, [selectedLang.code]: data.result }));
-              setLastScanDatesMap(prev => ({ ...prev, [selectedLang.code]: currentDate }));
+              setScanResults(data.result);
+              setLastScanDate(new Date());
             }
           } catch (e: any) {
             console.error("Error parsing scan chunk", e);
+            throw e;
           }
         }
         jsonStr = lines[lines.length - 1];
@@ -408,25 +363,9 @@ export default function App() {
   const getFilteredData = () => {
     if (!selectedLang) return { missing: [], freshness: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
 
-    const knownRedirectsMap = new Map();
-    (scanResults?.redirects || []).forEach((r: any) => {
-      knownRedirectsMap.set(r.originalUrl, r.destinationUrl);
-    });
-
-    const resolveRedirect = (url: string) => {
-      let currentUrl = url;
-      let iterations = 0;
-      while (iterations < 5 && knownRedirectsMap.has(currentUrl)) {
-        currentUrl = knownRedirectsMap.get(currentUrl);
-        iterations++;
-      }
-      return currentUrl;
-    };
-
-    const isRedirectSource = (url: string) => knownRedirectsMap.has(url);
-
+    // Content Freshness
     const freshness = clusters
-      .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
+      .filter(c => c[selectedLang?.code])
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
         const lastModStr = lastmods[localUrl] || lastmods[c.en] || null;
@@ -451,8 +390,11 @@ export default function App() {
         };
       });
 
+    // Missing Translations (Filter out 301s so we only see valid EN pages to translate)
+    const knownRedirects = new Set(scanResults?.redirects?.map((r: any) => r.originalUrl) || []);
+    
     const missing = clusters
-      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !isRedirectSource(c.en))
+      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !knownRedirects.has(c.en))
       .map((c, i) => ({
         id: `missing-${i}`,
         enUrl: c.en,
@@ -461,15 +403,15 @@ export default function App() {
         action: 'Translate'
       }));
 
+    // GSC Optimizations
     const optimizations = clusters
-      .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
+      .filter(c => c.en && c[selectedLang?.code])
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
-        const enUrlFallback = c.en || localUrl;
         const localData = gscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
         return {
           id: `opt-${i}`,
-          enUrl: enUrlFallback,
+          enUrl: c.en,
           localizedUrls: c,
           localImpressions: { [selectedLang?.code]: localData.impressions },
           localTopKeyword: { [selectedLang?.code]: localData.topKeyword },
@@ -483,87 +425,44 @@ export default function App() {
     let inlinks: any[] = [];
 
     if (scanResults) {
-      const oppsMap = new Map();
-      (scanResults.opportunities || []).forEach((opp: any) => {
-        if (!isEnglishUrl(opp.enLink) || isOtherLangUrl(opp.source)) return;
-
-        const resolvedEnLink = resolveRedirect(opp.enLink);
-        const resolvedOriginal = resolveRedirect(opp.originalLink);
-        
-        const targetCluster = clusters.find(c => c.en === resolvedEnLink || c.en === opp.enLink);
-        const targetI18nLink = targetCluster?.[selectedLang?.code || ''] || opp.i18nLink;
-
-        if (resolvedOriginal === targetI18nLink) return;
-
-        const key = `${opp.source}-${opp.originalLink}`;
-        if (!oppsMap.has(key)) {
-          oppsMap.set(key, {
-            enUrl: resolvedEnLink,
-            originalLink: opp.originalLink,
-            localizedUrls: { [selectedLang?.code || '']: targetI18nLink },
-            sourceUrl: opp.source,
-            linksToEn: 1
-          });
-        }
-      });
-      linking = Array.from(oppsMap.values()).map((opp, i) => ({ ...opp, id: `link-${i}` }));
+      linking = scanResults.opportunities
+        .filter((opp: any) => isEnglishUrl(opp.enLink))
+        .map((opp: any, i: number) => ({
+          id: `link-${i}`,
+          enUrl: opp.enLink,
+          originalLink: opp.originalLink,
+          localizedUrls: { [selectedLang?.code || '']: opp.i18nLink },
+          sourceUrl: opp.source,
+          linksToEn: 1 
+        }));
 
       const brokenMap = new Map();
-      (scanResults.brokenLinks || []).forEach((bl: any) => {
-        if (isOtherLangUrl(bl.brokenLink) || isOtherLangUrl(bl.source)) return;
-        
-        const resolvedBroken = resolveRedirect(bl.brokenLink);
-
-        if (!brokenMap.has(resolvedBroken)) {
-          brokenMap.set(resolvedBroken, {
-            enUrl: resolvedBroken,
+      scanResults.brokenLinks?.forEach((bl: any) => {
+        if (!brokenMap.has(bl.brokenLink)) {
+          brokenMap.set(bl.brokenLink, {
+            id: `broken-${bl.brokenLink}`,
+            enUrl: bl.brokenLink,
             sources: [],
             brokenLinksCount: 0
           });
         }
-        const item = brokenMap.get(resolvedBroken);
-        if (!item.sources.includes(bl.source) && bl.source !== "Sitemap Check") {
+        const item = brokenMap.get(bl.brokenLink);
+        if (!item.sources.includes(bl.source)) {
           item.sources.push(bl.source);
         }
         item.brokenLinksCount += 1;
       });
-      brokenLinks = Array.from(brokenMap.values()).map((bl, i) => ({ ...bl, id: `broken-${i}` }));
+      brokenLinks = Array.from(brokenMap.values());
 
-      redirects = (scanResults.redirects || [])
-        .filter((r: any) => !isOtherLangUrl(r.originalUrl) && r.sources && r.sources.length > 0)
-        .map((r: any, i: number) => ({
-          ...r,
-          id: `redirect-${i}`
-        }));
+      redirects = (scanResults.redirects || []).map((r: any, i: number) => ({
+        ...r,
+        id: `redirect-${i}`
+      }));
       
-      const mergedInlinks = new Map();
-      (scanResults.inlinks || []).forEach((link: any) => {
-          if (isOtherLangUrl(link.url)) return;
-          
-          const resolvedUrl = resolveRedirect(link.url);
-          
-          if (!mergedInlinks.has(resolvedUrl)) {
-              mergedInlinks.set(resolvedUrl, {
-                  url: resolvedUrl,
-                  inlinks: 0,
-                  uniqueInlinks: 0,
-                  sources: [],
-                  seenAnchors: new Set()
-              });
-          }
-          
-          const merged = mergedInlinks.get(resolvedUrl);
-          merged.inlinks += link.inlinks;
-          
-          (link.sources || []).forEach((src: any) => {
-              merged.sources.push(src);
-              if (src.anchor && !merged.seenAnchors.has(src.anchor)) {
-                  merged.seenAnchors.add(src.anchor);
-                  merged.uniqueInlinks += 1;
-              }
-          });
-      });
-      inlinks = Array.from(mergedInlinks.values()).map((link, i) => ({ ...link, id: `inlink-${i}` }));
+      inlinks = (scanResults.inlinks || []).map((link: any, i: number) => ({
+        ...link,
+        id: `inlink-${i}`
+      }));
     }
 
     return { missing, freshness, optimizations, linking, brokenLinks, redirects, inlinks };
@@ -571,77 +470,6 @@ export default function App() {
 
   const filteredData = getFilteredData();
   const activeTabArray = getActiveTabArray();
-
-  const exportToCSV = () => {
-    if (activeTabArray.length === 0) return;
-
-    let headers: string[] = [];
-    let rows: any[][] = [];
-
-    switch (activeTab) {
-      case 'optimizations':
-        headers = ['Localized URL', 'English Original', 'Local Impressions', 'Target Keyword', 'Action'];
-        rows = activeTabArray.map(row => [
-          row.localizedUrls?.[selectedLang?.code || ''] || row.enUrl,
-          row.enUrl,
-          row.localImpressions?.[selectedLang?.code || ''] || 0,
-          customKeywords[row.id] || row.localTopKeyword?.[selectedLang?.code || ''] || 'N/A',
-          row.recommendedAction
-        ]);
-        break;
-      case 'freshness':
-        headers = ['URL', 'Impressions', 'Last Updated', 'Days Old', 'Status'];
-        rows = activeTabArray.map(row => [
-          row.url, row.impressions, row.lastMod || 'Unknown', row.daysOld, row.isStale ? 'Update Content' : 'Fresh'
-        ]);
-        break;
-      case 'missing':
-        headers = ['English URL', 'Global Impressions', 'Top Keyword', 'Status'];
-        rows = activeTabArray.map(row => [
-          row.enUrl, row.globalImpressions, row.topKeyword, 'Needs Translation'
-        ]);
-        break;
-      case 'linking':
-        headers = ['Source Page', 'Original Link', 'Localized Link', 'Status'];
-        rows = activeTabArray.map(row => [
-          row.sourceUrl, row.originalLink, row.localizedUrls?.[selectedLang?.code || ''], 'Update Link'
-        ]);
-        break;
-      case 'broken':
-        headers = ['Broken URL', 'Occurrences', 'Sources'];
-        rows = activeTabArray.map(row => [
-          row.enUrl, row.brokenLinksCount, row.sources?.join(', ') || ''
-        ]);
-        break;
-      case 'redirects':
-        headers = ['Original URL', 'Destination URL', 'Status Code', 'Sources'];
-        rows = activeTabArray.map(row => [
-          row.originalUrl, row.destinationUrl, row.statusCode, row.sources?.join(', ') || ''
-        ]);
-        break;
-      case 'inlinks':
-        headers = ['Destination URL', 'Total Inlinks', 'Unique Anchors', 'Sources'];
-        rows = activeTabArray.map(row => [
-          row.url, row.inlinks, row.uniqueInlinks, 
-          row.sources?.map((s: any) => `${s.url} ("${s.anchor}")`).join(' | ') || ''
-        ]);
-        break;
-    }
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => {
-        const cellStr = String(cell || '').replace(/"/g, '""');
-        return `"${cellStr}"`;
-      }).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `i18n_seo_${activeTab}_${selectedLang?.code || 'export'}.csv`;
-    link.click();
-  };
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -705,18 +533,8 @@ export default function App() {
           </div>
           <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mt-4 mb-2">Connected Project</p>
           <div className="bg-slate-800 rounded-lg p-2 text-sm text-slate-300 flex items-center justify-between">
-            <span className="truncate flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              lucid.co
-            </span>
-            <button 
-              onClick={() => fetchBaseData(localStorage.getItem('gsc_token') || '', true)}
-              disabled={isConnecting}
-              title="Force Refresh Sitemap & GSC Data"
-              className="hover:bg-slate-700 hover:text-white p-1.5 rounded transition-colors disabled:opacity-50"
-            >
-              <RefreshCcw className={`w-3.5 h-3.5 ${isConnecting ? 'animate-spin' : ''}`} />
-            </button>
+            <span className="truncate">lucid.co</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
         </div>
 
@@ -759,6 +577,7 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
+        {}
         <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10 shrink-0">
           <div className="flex items-center gap-6">
             <h2 className="text-xl font-semibold text-slate-800 capitalize flex items-center gap-2">
@@ -771,7 +590,7 @@ export default function App() {
               {scanResults && ['linking', 'broken', 'redirects', 'inlinks'].includes(activeTab) && (
                 <div className="text-right mr-2 hidden lg:block">
                   <p className="text-xs font-medium text-slate-500 flex items-center justify-end gap-1">
-                    <Clock className="w-3.5 h-3.5" /> Last scan {lastScanDate ? lastScanDate.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                    <Clock className="w-3.5 h-3.5" /> Data from last scan {lastScanDate ? `(${lastScanDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})` : ''}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Click "Run Deep Scan" to refresh database</p>
                 </div>
@@ -783,6 +602,8 @@ export default function App() {
                     const lang = languages.find(l => l.code === e.target.value);
                     if (lang) {
                       setSelectedLang(lang);
+                      setScanResults(null);
+                      setLastScanDate(null);
                       setCurrentPage(1);
                     }
                   }}
@@ -832,12 +653,6 @@ export default function App() {
                 />
               </div>
             </div>
-            <button 
-              onClick={exportToCSV}
-              className="ml-4 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg shadow-sm transition-colors"
-            >
-              <Download className="w-4 h-4" /> Export CSV
-            </button>
           </div>
         )}
 
@@ -868,6 +683,7 @@ export default function App() {
         <div className="flex-1 overflow-auto p-8 bg-slate-50/50">
           <div className="max-w-6xl mx-auto space-y-6">
 
+            {}
             {activeTab === 'llm' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-8 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
@@ -934,6 +750,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'optimizations' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1017,6 +834,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'freshness' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1068,6 +886,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'missing' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1105,6 +924,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'linking' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1162,13 +982,13 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'broken' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
                   <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                     <ShieldAlert className="w-5 h-5 text-indigo-500" /> 404 Finder
                   </h3>
-                  <p className="text-sm text-slate-500 mt-1">Internal links pointing to dead pages.</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-600">
@@ -1182,75 +1002,10 @@ export default function App() {
                     <tbody className="divide-y divide-slate-100">
                       {paginatedData.length > 0 ? paginatedData.map((link: any) => (
                         <Fragment key={link.id}>
-                          <tr onClick={() => toggleRow(link.id)} className="transition-colors cursor-pointer hover:bg-slate-50">
+                          <tr onClick={() => toggleRow(link.id)} className={`transition-colors cursor-pointer ${link.inlinks === 0 ? 'bg-red-50/40 hover:bg-red-50/80' : 'hover:bg-indigo-50/50'}`}>
                             <td className="p-4 font-medium text-slate-800 truncate max-w-sm flex items-center gap-2">
                               {expandedRows[link.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-                              <span className="truncate">{link.enUrl.replace('https://lucid.co', '')}</span>
-                            </td>
-                            <td className="p-4">
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg font-bold text-red-500">{link.brokenLinksCount || 0}</span>
-                                <span className="text-slate-500 text-xs">links returning 404</span>
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
-                                Fix 404
-                              </span>
-                            </td>
-                          </tr>
-                          {expandedRows[link.id] && link.sources && link.sources.length > 0 && (
-                            <tr className="bg-slate-50">
-                              <td colSpan={3} className="p-4 pl-12 border-t border-slate-100">
-                                <div className="text-sm font-semibold text-slate-700 mb-3">Linked From:</div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {link.sources.map((srcUrl: string, idx: number) => (
-                                    <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5">
-                                      <div className="text-xs text-slate-500 truncate" title={srcUrl}>
-                                        <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{srcUrl.replace('https://lucid.co', '')}</a>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      )) : (
-                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No broken links found!</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'inlinks' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50">
-                  <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                    <Network className="w-5 h-5 text-indigo-500" /> Internal Links
-                  </h3>
-                  <p className="text-sm text-slate-500 mt-1">Discover pages with low internal linking. Pages with 0 inlinks are highlighted in red.</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="text-xs uppercase bg-slate-100 text-slate-500">
-                      <tr>
-                        <th className="p-4 font-semibold">Destination URL</th>
-                        <SortableHeader label="Total Inlinks" sortKey="inlinks" />
-                        <SortableHeader label="Unique Anchors" sortKey="uniqueInlinks" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {paginatedData.length > 0 ? paginatedData.map((link: any) => (
-                        <Fragment key={link.id}>
-                          <tr onClick={() => toggleRow(link.id)} className={`transition-colors cursor-pointer ${link.inlinks === 0 ? 'bg-red-50/40 hover:bg-red-50/80' : 'hover:bg-slate-50'}`}>
-                            <td className="p-4 font-medium text-slate-800 truncate max-w-sm flex items-center gap-2">
-                              {expandedRows[link.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-                              <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                <span className="truncate">{link.url.replace('https://lucid.co', '')}</span> <ExternalLink className="w-3 h-3 inline shrink-0" />
-                              </a>
+                              <span className="truncate">{link.url.replace('https://lucid.co', '')}</span>
                             </td>
                             <td className="p-4">
                               <span className={`font-bold px-2 py-1 rounded border ${link.inlinks === 0 ? 'text-red-700 bg-red-100 border-red-200' : 'text-indigo-700 bg-indigo-50 border-indigo-100'}`}>
@@ -1259,12 +1014,12 @@ export default function App() {
                             </td>
                             <td className="p-4"><span className="font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{link.uniqueInlinks}</span></td>
                           </tr>
-                          {expandedRows[link.id] && link.sources && link.sources.length > 0 && (
+                          {expandedRows[link.id] && (
                             <tr className="bg-slate-50">
                               <td colSpan={3} className="p-4 pl-12 border-t border-slate-100">
                                 <div className="text-sm font-semibold text-slate-700 mb-3">Sources & Anchor Texts:</div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {link.sources.map((src: any, idx: number) => (
+                                  {link.sources?.map((src: any, idx: number) => (
                                     <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5">
                                       <div className="text-xs text-slate-500 truncate" title={src.url}>
                                         <span className="font-semibold text-slate-400 mr-1">From:</span>
@@ -1279,7 +1034,7 @@ export default function App() {
                           )}
                         </Fragment>
                       )) : (
-                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No internal links found! Run a Deep Scan.</td></tr>
+                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No internal links found!</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -1287,91 +1042,23 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'redirects' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50">
-                  <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                    <ArrowRight className="w-5 h-5 text-indigo-500" /> Redirects Found
-                  </h3>
-                  <p className="text-sm text-slate-500 mt-1">Internal links pointing to pages that redirect.</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="text-xs uppercase bg-slate-100 text-slate-500">
-                      <tr>
-                        <th className="p-4 font-semibold">Original Link (Found on Page)</th>
-                        <th className="p-4 font-semibold">Final Destination</th>
-                        <th className="p-4 font-semibold">Status Code</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {paginatedData.length > 0 ? paginatedData.map((link: any) => (
-                        <Fragment key={link.id}>
-                          <tr onClick={() => toggleRow(link.id)} className="transition-colors cursor-pointer hover:bg-slate-50">
-                            <td className="p-4 max-w-sm truncate flex items-center gap-2">
-                              {expandedRows[link.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-                              <span className="text-red-500 line-through decoration-red-300 truncate">{link.originalUrl.replace('https://lucid.co', '')}</span>
-                            </td>
-                            <td className="p-4 max-w-sm truncate">
-                              <a href={link.destinationUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline flex items-center gap-1 font-medium">
-                                {link.destinationUrl.replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline shrink-0" />
-                              </a>
-                            </td>
-                            <td className="p-4">
-                              <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                                {link.statusCode} Redirect
-                              </span>
-                            </td>
-                          </tr>
-                          {expandedRows[link.id] && link.sources && link.sources.length > 0 && (
-                            <tr className="bg-slate-50">
-                              <td colSpan={3} className="p-4 pl-12 border-t border-slate-100">
-                                <div className="text-sm font-semibold text-slate-700 mb-3">Linked From:</div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {link.sources.map((srcUrl: string, idx: number) => (
-                                    <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5">
-                                      <div className="text-xs text-slate-500 truncate" title={srcUrl}>
-                                        <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{srcUrl.replace('https://lucid.co', '')}</a>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      )) : (
-                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No redirects found!</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {activeTab !== 'llm' && activeTabArray.length > itemsPerPage && (
-               <div className="flex justify-center mt-6 mb-8">
+            {activeTab !== 'llm' && getActiveTabArray().length > itemsPerPage && (
+               <div className="flex justify-center mt-6">
                  <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                    <button 
-                     onClick={() => {
-                         setCurrentPage(p => Math.max(1, p - 1));
-                         document.querySelector('.overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
-                     }}
+                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                      disabled={currentPage === 1}
-                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-r border-slate-200 transition-colors"
+                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-r border-slate-200"
                    >
                      Previous
                    </button>
                    <span className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50">
-                     Page {currentPage} of {Math.ceil(activeTabArray.length / itemsPerPage)}
+                     Page {currentPage} of {Math.ceil(getActiveTabArray().length / itemsPerPage)}
                    </span>
                    <button 
-                     onClick={() => {
-                         setCurrentPage(p => p + 1);
-                         document.querySelector('.overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
-                     }}
-                     disabled={currentPage === Math.ceil(activeTabArray.length / itemsPerPage)}
-                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-l border-slate-200 transition-colors"
+                     onClick={() => setCurrentPage(p => p + 1)}
+                     disabled={currentPage === Math.ceil(getActiveTabArray().length / itemsPerPage)}
+                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-l border-slate-200"
                    >
                      Next
                    </button>
