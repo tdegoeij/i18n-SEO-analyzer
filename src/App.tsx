@@ -23,8 +23,10 @@ export default function App() {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [clusters, setClusters] = useState<any[]>([]);
   
+  // These core data objects will now be mathematically protected against undefined crashes
   const [gscData, setGscData] = useState<Record<string, PageData>>({});
   const [lastmods, setLastmods] = useState<Record<string, string>>({});
+  
   const [scanResults, setScanResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -69,8 +71,11 @@ export default function App() {
     setLoading(true);
     setProgress(0);
     setProgressMsg('Initializing connection...');
-    // Clear old data to prevent stale states
+    
+    // Clear old data to prevent stale states across refreshes
     setGscData({});
+    setClusters([]);
+    setLastmods({});
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/data?force_refresh=false`, {
@@ -105,15 +110,16 @@ export default function App() {
               setProgressMsg(data.message);
             } 
             else if (data.status === 'gsc_chunk') {
-              // Append uncapped GSC chunks to browser RAM dynamically
+              // Dynamically append chunks to browser RAM
               setGscData(prev => ({ ...prev, ...data.result }));
             }
             else if (data.status === 'complete') {
               const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
               setLanguages(langs);
               if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
-              setClusters(data.result.clusters);
+              setClusters(data.result.clusters || []);
               setLastmods(data.result.lastmods || {});
+              // CRITICAL FIX: Removed setGscData() here so it stops wiping out the streamed data!
               setProgress(100);
               setProgressMsg('Data loaded successfully!');
               setTimeout(() => setLoading(false), 1000);
@@ -124,6 +130,7 @@ export default function App() {
         }
       }
       
+      // Safety catch for large truncated JSON buffers at the end of the stream
       if (buffer.trim()) {
         try {
            const fixes = buffer.split('}{').join('}\n{').split('\n');
@@ -134,7 +141,7 @@ export default function App() {
                   const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
                   setLanguages(langs);
                   if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
-                  setClusters(data.result.clusters);
+                  setClusters(data.result.clusters || []);
                   setLastmods(data.result.lastmods || {});
                   setProgress(100);
                   setProgressMsg('Data loaded successfully!');
@@ -255,6 +262,7 @@ export default function App() {
       if (!scanResults) return false;
       return scanResults.redirects?.some((r: any) => r.originalUrl === url);
   };
+  
   const isEnglishUrl = (url: string) => {
       if (!url) return false;
       const path = url.replace('https://lucid.co', '');
@@ -264,11 +272,16 @@ export default function App() {
   const getFilteredData = () => {
     if (!selectedLang) return { freshness: [], missing: [], optimizations: [], linking: [], brokenLinks: [] };
 
-    const freshness = clusters
+    // ULTIMATE SAFETY NET: Guarantee these dictionaries are NEVER undefined
+    const safeGscData = gscData || {};
+    const safeLastmods = lastmods || {};
+    const safeClusters = clusters || [];
+
+    const freshness = safeClusters
       .filter(c => c[selectedLang.code] && !isRedirectSource(c[selectedLang.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang.code];
-        const lastModStr = lastmods[localUrl] || lastmods[c.en] || null;
+        const lastModStr = safeLastmods[localUrl] || safeLastmods[c.en] || null;
         
         let isStale = false;
         let daysOld = 0;
@@ -277,7 +290,7 @@ export default function App() {
             daysOld = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             isStale = daysOld > 90;
         } else {
-            isStale = true; // Assume stale if no lastmod is provided
+            isStale = true;
         }
         
         return {
@@ -286,34 +299,33 @@ export default function App() {
             lastMod: lastModStr,
             daysOld,
             isStale,
-            // OPTIONAL CHAINING: Prevents crash if URL isn't in GSC yet
-            impressions: gscData?.[localUrl]?.impressions || 0 
+            impressions: safeGscData[localUrl]?.impressions || 0 
         };
       });
 
-    const missing = clusters
+    const missing = safeClusters
       .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang.code] && !isRedirectSource(c.en))
       .map((c, i) => ({
         id: `missing-${i}`,
         enUrl: c.en,
-        globalImpressions: gscData?.[c.en]?.impressions || 0,
-        topKeyword: gscData?.[c.en]?.topKeyword || 'N/A',
+        globalImpressions: safeGscData[c.en]?.impressions || 0,
+        topKeyword: safeGscData[c.en]?.topKeyword || 'N/A',
         action: 'Translate'
       }));
 
-    const optimizations = clusters
+    const optimizations = safeClusters
       .filter(c => c[selectedLang.code] && !isRedirectSource(c[selectedLang.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang.code];
         const enUrlFallback = c.en || localUrl;
-        const localData = gscData?.[localUrl] || { impressions: 0, topKeyword: 'N/A' };
+        const localData = safeGscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
         return {
           id: `opt-${i}`,
           enUrl: enUrlFallback,
           localizedUrls: c,
-          localImpressions: { [selectedLang.code]: localData.impressions },
-          localTopKeyword: { [selectedLang.code]: localData.topKeyword },
-          recommendedAction: localData.impressions > 0 ? 'Expand Content' : 'Analyze'
+          localImpressions: { [selectedLang.code]: localData.impressions || 0 },
+          localTopKeyword: { [selectedLang.code]: localData.topKeyword || 'N/A' },
+          recommendedAction: (localData.impressions || 0) > 0 ? 'Expand Content' : 'Analyze'
         };
       });
 
@@ -372,7 +384,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">
-      {}
+      {/* Sidebar Navigation */}
       <div className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative">
         <div className="p-6 border-b border-slate-100">
           <div className="flex items-center gap-3 text-blue-600 font-bold text-xl tracking-tight">
@@ -423,7 +435,7 @@ export default function App() {
         </div>
       </div>
 
-      {}
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between shadow-sm z-20">
           <h2 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
@@ -495,7 +507,7 @@ export default function App() {
           </div>
         </header>
 
-        {}
+        {/* Loading Overlay */}
         {loading && (
           <div className="absolute top-0 left-0 right-0 z-50">
             <div className="h-1.5 w-full bg-blue-100 overflow-hidden">
@@ -511,11 +523,10 @@ export default function App() {
           </div>
         )}
 
-        {}
         <main className="flex-1 overflow-y-auto p-8 bg-slate-50/50 relative">
           <div className="max-w-7xl mx-auto space-y-6">
 
-            {}
+            {/* LLM Optimizer View */}
             {activeTab === 'optimizer' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -643,7 +654,7 @@ export default function App() {
               </div>
             )}
 
-            {}
+            {/* Freshness View */}
             {activeTab === 'freshness' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="overflow-x-auto">
@@ -688,7 +699,7 @@ export default function App() {
               </div>
             )}
 
-            {}
+            {/* Missing Translations View */}
             {activeTab === 'missing' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="overflow-x-auto">
@@ -720,7 +731,7 @@ export default function App() {
               </div>
             )}
 
-            {}
+            {/* Keyword Analysis View */}
             {activeTab === 'optimizations' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="overflow-x-auto">
@@ -763,7 +774,7 @@ export default function App() {
               </div>
             )}
 
-            {}
+            {/* Internal Linking Graph */}
             {activeTab === 'linking' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 {scanResults ? (
@@ -813,7 +824,7 @@ export default function App() {
               </div>
             )}
 
-            {}
+            {/* 404 & Redirect Diagnostics */}
             {activeTab === 'errors' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 {scanResults ? (
