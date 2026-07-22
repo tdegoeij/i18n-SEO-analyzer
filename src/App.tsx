@@ -23,7 +23,7 @@ export default function App() {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [clusters, setClusters] = useState<any[]>([]);
   
-  // These core data objects will now be mathematically protected against undefined crashes
+  // High-performance streaming state
   const [gscData, setGscData] = useState<Record<string, PageData>>({});
   const [lastmods, setLastmods] = useState<Record<string, string>>({});
   
@@ -72,7 +72,7 @@ export default function App() {
     setProgress(0);
     setProgressMsg('Initializing connection...');
     
-    // Clear old data to prevent stale states across refreshes
+    // Clear old state to ensure clean dataset
     setGscData({});
     setClusters([]);
     setLastmods({});
@@ -98,7 +98,7 @@ export default function App() {
         
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep the incomplete chunk in the buffer
+        buffer = lines.pop() || ''; // Hold partial line in buffer
 
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -110,7 +110,6 @@ export default function App() {
               setProgressMsg(data.message);
             } 
             else if (data.status === 'gsc_chunk') {
-              // Dynamically append chunks to browser RAM
               setGscData(prev => ({ ...prev, ...data.result }));
             }
             else if (data.status === 'complete') {
@@ -119,7 +118,6 @@ export default function App() {
               if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
               setClusters(data.result.clusters || []);
               setLastmods(data.result.lastmods || {});
-              // CRITICAL FIX: Removed setGscData() here so it stops wiping out the streamed data!
               setProgress(100);
               setProgressMsg('Data loaded successfully!');
               setTimeout(() => setLoading(false), 1000);
@@ -130,7 +128,7 @@ export default function App() {
         }
       }
       
-      // Safety catch for large truncated JSON buffers at the end of the stream
+      // Buffer safety check for trailing NDJSON objects
       if (buffer.trim()) {
         try {
            const fixes = buffer.split('}{').join('}\n{').split('\n');
@@ -170,7 +168,6 @@ export default function App() {
       const response = await fetch(`${API_BASE_URL}/api/scan_all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Passing both formats to guarantee it bypasses the 422 Unprocessable Entity error
         body: JSON.stringify({ 
             siteUrl: 'https://lucid.co/', 
             targetLang: selectedLang.code,
@@ -269,16 +266,19 @@ export default function App() {
       return !path.match(/^\/[a-z]{2}(-[a-z]{2})?\//i);
   };
 
+  const getSafeGsc = (url: string | null | undefined): PageData => {
+    if (!url || !gscData) return { impressions: 0, topKeyword: 'N/A' };
+    return gscData[url] || { impressions: 0, topKeyword: 'N/A' };
+  };
+
   const getFilteredData = () => {
     if (!selectedLang) return { freshness: [], missing: [], optimizations: [], linking: [], brokenLinks: [] };
 
-    // ULTIMATE SAFETY NET: Guarantee these dictionaries are NEVER undefined
-    const safeGscData = gscData || {};
     const safeLastmods = lastmods || {};
     const safeClusters = clusters || [];
 
     const freshness = safeClusters
-      .filter(c => c[selectedLang.code] && !isRedirectSource(c[selectedLang.code]))
+      .filter(c => c && c[selectedLang.code] && !isRedirectSource(c[selectedLang.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang.code];
         const lastModStr = safeLastmods[localUrl] || safeLastmods[c.en] || null;
@@ -293,32 +293,37 @@ export default function App() {
             isStale = true;
         }
         
+        const pageGsc = getSafeGsc(localUrl);
+        
         return {
             id: `fresh-${i}`,
             url: localUrl,
             lastMod: lastModStr,
             daysOld,
             isStale,
-            impressions: safeGscData[localUrl]?.impressions || 0 
+            impressions: pageGsc.impressions || 0
         };
       });
 
     const missing = safeClusters
-      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang.code] && !isRedirectSource(c.en))
-      .map((c, i) => ({
-        id: `missing-${i}`,
-        enUrl: c.en,
-        globalImpressions: safeGscData[c.en]?.impressions || 0,
-        topKeyword: safeGscData[c.en]?.topKeyword || 'N/A',
-        action: 'Translate'
-      }));
+      .filter(c => c && c.en && isEnglishUrl(c.en) && !c[selectedLang.code] && !isRedirectSource(c.en))
+      .map((c, i) => {
+        const enGsc = getSafeGsc(c.en);
+        return {
+          id: `missing-${i}`,
+          enUrl: c.en,
+          globalImpressions: enGsc.impressions || 0,
+          topKeyword: enGsc.topKeyword || 'N/A',
+          action: 'Translate'
+        };
+      });
 
     const optimizations = safeClusters
-      .filter(c => c[selectedLang.code] && !isRedirectSource(c[selectedLang.code]))
+      .filter(c => c && c[selectedLang.code] && !isRedirectSource(c[selectedLang.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang.code];
         const enUrlFallback = c.en || localUrl;
-        const localData = safeGscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
+        const localData = getSafeGsc(localUrl);
         return {
           id: `opt-${i}`,
           enUrl: enUrlFallback,
@@ -435,7 +440,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main View Area */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between shadow-sm z-20">
           <h2 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
@@ -507,7 +512,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Loading Overlay */}
+        {/* Progress Bar Component */}
         {loading && (
           <div className="absolute top-0 left-0 right-0 z-50">
             <div className="h-1.5 w-full bg-blue-100 overflow-hidden">
@@ -654,7 +659,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Freshness View */}
+            {/* Freshness View Table */}
             {activeTab === 'freshness' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="overflow-x-auto">
@@ -699,7 +704,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Missing Translations View */}
+            {/* Missing Translations Table */}
             {activeTab === 'missing' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="overflow-x-auto">
@@ -731,7 +736,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Keyword Analysis View */}
+            {/* Keyword Analysis View Table */}
             {activeTab === 'optimizations' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 <div className="overflow-x-auto">
@@ -774,7 +779,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Internal Linking Graph */}
+            {/* Internal Linking Graph View */}
             {activeTab === 'linking' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 {scanResults ? (
@@ -824,7 +829,7 @@ export default function App() {
               </div>
             )}
 
-            {/* 404 & Redirect Diagnostics */}
+            {/* Diagnostics View Table */}
             {activeTab === 'errors' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                 {scanResults ? (
