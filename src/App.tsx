@@ -3,7 +3,7 @@ import {
   AlertCircle, CheckCircle2, ChevronRight, ChevronDown, ExternalLink, 
   Globe2, Link as LinkIcon, Search, LogOut, 
   FileText, BrainCircuit, Activity, ArrowRight,
-  ShieldAlert, RefreshCcw, Network, Clock, ArrowUpDown, ArrowUp, ArrowDown
+  ShieldAlert, RefreshCcw, Network, Clock, ArrowUpDown, ArrowUp, ArrowDown, Download
 } from 'lucide-react';
 
 const API_BASE_URL = typeof window !== 'undefined' && 
@@ -559,6 +559,77 @@ export default function App() {
   const filteredData = getFilteredData();
   const activeTabArray = getActiveTabArray();
 
+  const exportToCSV = () => {
+    if (activeTabArray.length === 0) return;
+
+    let headers: string[] = [];
+    let rows: any[][] = [];
+
+    switch (activeTab) {
+      case 'optimizations':
+        headers = ['Localized URL', 'English Original', 'Local Impressions', 'Target Keyword', 'Action'];
+        rows = activeTabArray.map(row => [
+          row.localizedUrls?.[selectedLang?.code || ''] || row.enUrl,
+          row.enUrl,
+          row.localImpressions?.[selectedLang?.code || ''] || 0,
+          customKeywords[row.id] || row.localTopKeyword?.[selectedLang?.code || ''] || 'N/A',
+          row.recommendedAction
+        ]);
+        break;
+      case 'freshness':
+        headers = ['URL', 'Impressions', 'Last Updated', 'Days Old', 'Status'];
+        rows = activeTabArray.map(row => [
+          row.url, row.impressions, row.lastMod || 'Unknown', row.daysOld, row.isStale ? 'Update Content' : 'Fresh'
+        ]);
+        break;
+      case 'missing':
+        headers = ['English URL', 'Global Impressions', 'Top Keyword', 'Status'];
+        rows = activeTabArray.map(row => [
+          row.enUrl, row.globalImpressions, row.topKeyword, 'Needs Translation'
+        ]);
+        break;
+      case 'linking':
+        headers = ['Source Page', 'Original Link', 'Localized Link', 'Status'];
+        rows = activeTabArray.map(row => [
+          row.sourceUrl, row.originalLink, row.localizedUrls?.[selectedLang?.code || ''], 'Update Link'
+        ]);
+        break;
+      case 'broken':
+        headers = ['Broken URL', 'Occurrences', 'Sources'];
+        rows = activeTabArray.map(row => [
+          row.enUrl, row.brokenLinksCount, row.sources?.join(', ') || ''
+        ]);
+        break;
+      case 'redirects':
+        headers = ['Original URL', 'Destination URL', 'Status Code', 'Sources'];
+        rows = activeTabArray.map(row => [
+          row.originalUrl, row.destinationUrl, row.statusCode, row.sources?.join(', ') || ''
+        ]);
+        break;
+      case 'inlinks':
+        headers = ['Destination URL', 'Total Inlinks', 'Unique Anchors', 'Sources'];
+        rows = activeTabArray.map(row => [
+          row.url, row.inlinks, row.uniqueInlinks, 
+          row.sources?.map((s: any) => `${s.url} ("${s.anchor}")`).join(' | ') || ''
+        ]);
+        break;
+    }
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const cellStr = String(cell || '').replace(/"/g, '""');
+        return `"${cellStr}"`;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `i18n_seo_${activeTab}_${selectedLang?.code || 'export'}.csv`;
+    link.click();
+  };
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedData = activeTabArray.slice(startIndex, endIndex);
@@ -749,6 +820,12 @@ export default function App() {
                 />
               </div>
             </div>
+            <button 
+              onClick={exportToCSV}
+              className="ml-4 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg shadow-sm transition-colors"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
           </div>
         )}
 
