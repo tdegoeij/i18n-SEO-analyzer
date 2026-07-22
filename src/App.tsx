@@ -230,7 +230,24 @@ export default function App() {
       let jsonStr = '';
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        
+        if (done) {
+          if (jsonStr.trim()) {
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.status === 'progress') setProgressMsg(data.message);
+              if (data.status === 'complete') {
+                const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
+                setLanguages(langs);
+                if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
+                setClusters(data.result.clusters);
+                setLastmods(data.result.lastmods || {});
+                setGscData(data.result.gsc);
+              }
+            } catch (e) { console.error("Final chunk parse error", e); }
+          }
+          break;
+        }
         
         jsonStr += decoder.decode(value, { stream: true });
         const lines = jsonStr.split('\n');
@@ -294,7 +311,22 @@ export default function App() {
       let jsonStr = '';
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        
+        if (done) {
+          if (jsonStr.trim()) {
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.progress) setProgress(data.progress);
+              if (data.message) setProgressMsg(data.message);
+              if (data.result) {
+                const currentDate = new Date().toISOString();
+                setScanResultsMap(prev => ({ ...prev, [selectedLang?.code || '']: data.result }));
+                setLastScanDatesMap(prev => ({ ...prev, [selectedLang?.code || '']: currentDate }));
+              }
+            } catch(e) { console.error("Final chunk parse error", e); }
+          }
+          break;
+        }
         
         jsonStr += decoder.decode(value, { stream: true });
         const lines = jsonStr.split('\n');
