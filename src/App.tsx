@@ -9,7 +9,7 @@ import {
 const API_BASE_URL = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
-  : 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com'; // Use your real Heroku URL here!
+  : 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com';
 
 interface Language {
   code: string;
@@ -81,7 +81,6 @@ export default function App() {
   const getActiveTabArray = (): any[] => {
     let data = [...getActiveTabArrayRaw()];
 
-    // Apply URL Filter
     if (urlFilter.trim() !== '') {
       const lowerFilter = urlFilter.toLowerCase();
       data = data.filter(item => {
@@ -99,7 +98,6 @@ export default function App() {
       });
     }
 
-    // Apply Impressions Filter
     if (minImpressions !== '') {
       const minImp = Number(minImpressions);
       data = data.filter(item => {
@@ -115,7 +113,6 @@ export default function App() {
       });
     }
 
-    // Sorting
     if (sortConfig) {
       data.sort((a, b) => {
         let aVal = a[sortConfig.key];
@@ -256,11 +253,6 @@ export default function App() {
               setClusters(data.result.clusters);
               setLastmods(data.result.lastmods || {});
               setGscData(data.result.gsc);
-              
-              if (data.cached_scans) {
-                setScanResultsMap(data.cached_scans);
-                setLastScanDatesMap(data.cached_dates);
-              }
             }
           } catch (e: any) {
             console.error("Error parsing chunk", e);
@@ -287,12 +279,12 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target_lang: selectedLang.code,
-          clusters: clusters
+          siteUrl: "https://lucid.co/", // Fixed schema key match!
+          targetLang: selectedLang.code
         })
       });
 
-      if (!response.ok) throw new Error('Scan failed to start.');
+      if (!response.ok) throw new Error('Scan failed to start. (422 Unprocessable Entity = Schema Mismatch)');
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -319,8 +311,6 @@ export default function App() {
             if (data.message) setProgressMsg(data.message);
             if (data.result) {
               const currentDate = new Date().toISOString();
-              
-              // Persist seamlessly into maps
               setScanResultsMap(prev => ({ ...prev, [selectedLang.code]: data.result }));
               setLastScanDatesMap(prev => ({ ...prev, [selectedLang.code]: currentDate }));
             }
@@ -386,7 +376,6 @@ export default function App() {
   const getFilteredData = () => {
     if (!selectedLang) return { missing: [], freshness: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
 
-    // 1. Create a fast "Truth Map" for resolving redirects instantly
     const knownRedirectsMap = new Map();
     (scanResults?.redirects || []).forEach((r: any) => {
       knownRedirectsMap.set(r.originalUrl, r.destinationUrl);
@@ -395,7 +384,6 @@ export default function App() {
     const resolveRedirect = (url: string) => {
       let currentUrl = url;
       let iterations = 0;
-      // Safely follow up to 5 redirect hops to find the true destination
       while (iterations < 5 && knownRedirectsMap.has(currentUrl)) {
         currentUrl = knownRedirectsMap.get(currentUrl);
         iterations++;
@@ -405,7 +393,6 @@ export default function App() {
 
     const isRedirectSource = (url: string) => knownRedirectsMap.has(url);
 
-    // Content Freshness
     const freshness = clusters
       .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
@@ -432,7 +419,6 @@ export default function App() {
         };
       });
 
-    // Missing Translations
     const missing = clusters
       .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !isRedirectSource(c.en))
       .map((c, i) => ({
@@ -443,12 +429,11 @@ export default function App() {
         action: 'Translate'
       }));
 
-    // GSC Optimizations
     const optimizations = clusters
       .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
-        const enUrlFallback = c.en || localUrl; // Use local URL as fallback if no English version exists
+        const enUrlFallback = c.en || localUrl;
         const localData = gscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
         return {
           id: `opt-${i}`,
@@ -473,12 +458,9 @@ export default function App() {
         const resolvedEnLink = resolveRedirect(opp.enLink);
         const resolvedOriginal = resolveRedirect(opp.originalLink);
         
-        // Find the cluster using the final resolved destination URL
         const targetCluster = clusters.find(c => c.en === resolvedEnLink || c.en === opp.enLink);
         const targetI18nLink = targetCluster?.[selectedLang?.code || ''] || opp.i18nLink;
 
-        // CRITICAL: If the original link already redirects to the correct localized target, 
-        // it's not a missing localization opportunity, it's just a standard redirect. Skip it!
         if (resolvedOriginal === targetI18nLink) return;
 
         const key = `${opp.source}-${opp.originalLink}`;
@@ -526,7 +508,6 @@ export default function App() {
       (scanResults.inlinks || []).forEach((link: any) => {
           if (isOtherLangUrl(link.url)) return;
           
-          // Fast-forward any inlinks pointing to a redirect over to the final destination
           const resolvedUrl = resolveRedirect(link.url);
           
           if (!mergedInlinks.has(resolvedUrl)) {
@@ -746,7 +727,6 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {}
         <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between z-10 shrink-0">
           <div className="flex items-center gap-6">
             <h2 className="text-xl font-semibold text-slate-800 capitalize flex items-center gap-2">
@@ -829,7 +809,6 @@ export default function App() {
           </div>
         )}
 
-        {}
         {(isLoading || isConnecting) && (
           <div className="bg-indigo-50 border-b border-indigo-100 px-8 py-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3 flex-1">
@@ -923,7 +902,6 @@ export default function App() {
               </div>
             )}
 
-            {}
             {activeTab === 'optimizations' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1339,7 +1317,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Pagination UI - Using cached activeTabArray for stability */}
             {activeTab !== 'llm' && activeTabArray.length > itemsPerPage && (
                <div className="flex justify-center mt-6 mb-8">
                  <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
