@@ -770,29 +770,31 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {filteredData.optimizations.map((page) => (
+                      {filteredData.optimizations.length > 0 ? filteredData.optimizations.map((page) => (
                         <tr key={page.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-4 max-w-sm truncate">
-                             <a href={page.localizedUrls?.[selectedLang?.code || '']} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1.5 font-medium">
-                              {(page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl).replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3" />
+                          <td className="p-4 max-w-xs truncate">
+                             <a href={page.localizedUrls?.[selectedLang?.code || ''] || '#'} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                              {(page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl).replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
                             </a>
                             <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                              Origin: {page.enUrl.replace('https://lucid.co', '')}
+                              Original: {page.enUrl.replace('https://lucid.co', '')}
                             </div>
                           </td>
-                          <td className="p-4 font-semibold text-slate-800">
-                            {page.localImpressions?.[selectedLang?.code || '']?.toLocaleString() || 0}
+                          <td className="p-4">
+                            <span className="font-semibold">{page.localImpressions?.[selectedLang?.code || '']?.toLocaleString() || 0}</span>
                           </td>
-                          <td className="p-4 font-mono text-xs text-indigo-700 bg-indigo-50/50 rounded-lg shadow-inner">
+                          <td className="p-4 font-medium text-indigo-700 bg-indigo-50/50 rounded">
                             "{page.localTopKeyword?.[selectedLang?.code || ''] || 'N/A'}"
                           </td>
                           <td className="p-4">
-                            <span className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-sm">
-                              {page.recommendedAction}
+                            <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                              {page.recommendedAction || 'Analyze'}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                      )) : (
+                        <tr><td colSpan={4} className="p-8 text-center text-slate-500">No keyword data available.</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -808,27 +810,34 @@ export default function App() {
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
                         <tr>
                           <th className="p-4">Source Page</th>
-                          <th className="p-4">English Hardcoded Link</th>
+                          <th className="p-4">English Links Found</th>
                           <th className="p-4">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {filteredData.linking.map((page) => (
+                        {filteredData.linking.length > 0 ? filteredData.linking.map((page) => (
                           <tr key={page.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 font-medium text-slate-800">
-                               {(page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl).replace('https://lucid.co', '')}
-                            </td>
-                            <td className="p-4 text-slate-500 font-mono text-xs">
-                              {page.enUrl.replace('https://lucid.co', '')}
+                            <td className="p-4">
+                               <span className="font-medium text-slate-800 block">
+                                 {(page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl).replace('https://lucid.co', '')}
+                               </span>
+                               <span className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                                 Current EN link used: {page.enUrl.replace('https://lucid.co', '')}
+                               </span>
                             </td>
                             <td className="p-4">
-                               <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 shadow-sm cursor-pointer hover:bg-purple-100 transition-colors">
-                                 <Link className="w-3 h-3" /> Update Link
+                              <div className="flex items-center gap-2">
+                                 <span className="text-lg font-bold text-red-500">{page.linksToEn || 0}</span>
+                                 <span className="text-slate-500 text-xs">links</span>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                               <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                                 Update Link
                                </span>
                             </td>
                           </tr>
-                        ))}
-                        {filteredData.linking.length === 0 && (
+                        )) : (
                           <tr><td colSpan={3} className="p-8 text-center text-slate-500">Perfect! No English links found on these localized pages.</td></tr>
                         )}
                       </tbody>
@@ -857,30 +866,32 @@ export default function App() {
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-xs font-semibold tracking-wider">
                         <tr>
-                          <th className="p-4">Broken 404 Link</th>
-                          <th className="p-4">Found On Source Page</th>
+                          <th className="p-4">Source Page</th>
+                          <th className="p-4">Broken Links Found</th>
                           <th className="p-4">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {filteredData.brokenLinks.map((page) => (
+                        {filteredData.brokenLinks.length > 0 ? filteredData.brokenLinks.map((page) => (
                           <tr key={page.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 max-w-sm truncate text-red-600 font-medium">
-                              {page.enUrl.replace('https://lucid.co', '')}
-                            </td>
-                            <td className="p-4 max-w-sm truncate text-slate-500 font-mono text-xs">
-                               <a href={page.localizedUrls?.[selectedLang?.code || ''] || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
-                                {(page.localizedUrls?.[selectedLang?.code || ''] || '').replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
+                            <td className="p-4 max-w-xs truncate">
+                               <a href={page.localizedUrls?.[selectedLang?.code || ''] || '#'} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                                {(page.localizedUrls?.[selectedLang?.code || ''] || page.enUrl).replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
                               </a>
                             </td>
                             <td className="p-4">
-                               <span className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold bg-red-50 text-red-700 border border-red-200 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
-                                 <FileX className="w-3 h-3" /> Fix 404
+                              <div className="flex items-center gap-2">
+                                 <span className="text-lg font-bold text-red-500">{page.brokenLinksCount || 0}</span>
+                                 <span className="text-slate-500 text-xs">links returning 404</span>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                               <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                                 Fix 404
                                </span>
                             </td>
                           </tr>
-                        ))}
-                        {filteredData.brokenLinks.length === 0 && (
+                        )) : (
                           <tr><td colSpan={3} className="p-8 text-center text-slate-500">Amazing! No broken links detected during the crawl.</td></tr>
                         )}
                       </tbody>
