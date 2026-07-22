@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Globe, FileX, Link, RefreshCw, LogOut, ChevronDown, Check, Download, AlertTriangle, CheckCircle, ExternalLink, Activity, Zap } from 'lucide-react';
 
 const API_BASE_URL = typeof window !== 'undefined' && 
