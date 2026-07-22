@@ -445,13 +445,14 @@ export default function App() {
 
     // GSC Optimizations
     const optimizations = clusters
-      .filter(c => c.en && c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
+      .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
+        const enUrlFallback = c.en || localUrl; // Use local URL as fallback if no English version exists
         const localData = gscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
         return {
           id: `opt-${i}`,
-          enUrl: c.en,
+          enUrl: enUrlFallback,
           localizedUrls: c,
           localImpressions: { [selectedLang?.code]: localData.impressions },
           localTopKeyword: { [selectedLang?.code]: localData.topKeyword },
