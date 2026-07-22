@@ -386,9 +386,28 @@ export default function App() {
   const getFilteredData = () => {
     if (!selectedLang) return { missing: [], freshness: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
 
+    // 1. Create a fast "Truth Map" for resolving redirects instantly
+    const knownRedirectsMap = new Map();
+    (scanResults?.redirects || []).forEach((r: any) => {
+      knownRedirectsMap.set(r.originalUrl, r.destinationUrl);
+    });
+
+    const resolveRedirect = (url: string) => {
+      let currentUrl = url;
+      let iterations = 0;
+      // Safely follow up to 5 redirect hops to find the true destination
+      while (iterations < 5 && knownRedirectsMap.has(currentUrl)) {
+        currentUrl = knownRedirectsMap.get(currentUrl);
+        iterations++;
+      }
+      return currentUrl;
+    };
+
+    const isRedirectSource = (url: string) => knownRedirectsMap.has(url);
+
     // Content Freshness
     const freshness = clusters
-      .filter(c => c[selectedLang?.code])
+      .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
         const lastModStr = lastmods[localUrl] || lastmods[c.en] || null;
@@ -414,10 +433,8 @@ export default function App() {
       });
 
     // Missing Translations
-    const knownRedirects = new Set(scanResults?.redirects?.map((r: any) => r.originalUrl) || []);
-    
     const missing = clusters
-      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !knownRedirects.has(c.en))
+      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !isRedirectSource(c.en))
       .map((c, i) => ({
         id: `missing-${i}`,
         enUrl: c.en,
@@ -428,7 +445,7 @@ export default function App() {
 
     // GSC Optimizations
     const optimizations = clusters
-      .filter(c => c.en && c[selectedLang?.code])
+      .filter(c => c.en && c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
         const localData = gscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
@@ -448,36 +465,54 @@ export default function App() {
     let inlinks: any[] = [];
 
     if (scanResults) {
-      linking = (scanResults.opportunities || [])
-        .filter((opp: any) => isEnglishUrl(opp.enLink) && !isOtherLangUrl(opp.source))
-        .map((opp: any, i: number) => ({
-          id: `link-${i}`,
-          enUrl: opp.enLink,
-          originalLink: opp.originalLink,
-          localizedUrls: { [selectedLang?.code || '']: opp.i18nLink },
-          sourceUrl: opp.source,
-          linksToEn: 1 
-        }));
+      const oppsMap = new Map();
+      (scanResults.opportunities || []).forEach((opp: any) => {
+        if (!isEnglishUrl(opp.enLink) || isOtherLangUrl(opp.source)) return;
+
+        const resolvedEnLink = resolveRedirect(opp.enLink);
+        const resolvedOriginal = resolveRedirect(opp.originalLink);
+        
+        // Find the cluster using the final resolved destination URL
+        const targetCluster = clusters.find(c => c.en === resolvedEnLink || c.en === opp.enLink);
+        const targetI18nLink = targetCluster?.[selectedLang?.code || ''] || opp.i18nLink;
+
+        // CRITICAL: If the original link already redirects to the correct localized target, 
+        // it's not a missing localization opportunity, it's just a standard redirect. Skip it!
+        if (resolvedOriginal === targetI18nLink) return;
+
+        const key = `${opp.source}-${opp.originalLink}`;
+        if (!oppsMap.has(key)) {
+          oppsMap.set(key, {
+            enUrl: resolvedEnLink,
+            originalLink: opp.originalLink,
+            localizedUrls: { [selectedLang?.code || '']: targetI18nLink },
+            sourceUrl: opp.source,
+            linksToEn: 1
+          });
+        }
+      });
+      linking = Array.from(oppsMap.values()).map((opp, i) => ({ ...opp, id: `link-${i}` }));
 
       const brokenMap = new Map();
       (scanResults.brokenLinks || []).forEach((bl: any) => {
         if (isOtherLangUrl(bl.brokenLink) || isOtherLangUrl(bl.source)) return;
+        
+        const resolvedBroken = resolveRedirect(bl.brokenLink);
 
-        if (!brokenMap.has(bl.brokenLink)) {
-          brokenMap.set(bl.brokenLink, {
-            id: `broken-${bl.brokenLink}`,
-            enUrl: bl.brokenLink,
+        if (!brokenMap.has(resolvedBroken)) {
+          brokenMap.set(resolvedBroken, {
+            enUrl: resolvedBroken,
             sources: [],
             brokenLinksCount: 0
           });
         }
-        const item = brokenMap.get(bl.brokenLink);
+        const item = brokenMap.get(resolvedBroken);
         if (!item.sources.includes(bl.source) && bl.source !== "Sitemap Check") {
           item.sources.push(bl.source);
         }
         item.brokenLinksCount += 1;
       });
-      brokenLinks = Array.from(brokenMap.values());
+      brokenLinks = Array.from(brokenMap.values()).map((bl, i) => ({ ...bl, id: `broken-${i}` }));
 
       redirects = (scanResults.redirects || [])
         .filter((r: any) => !isOtherLangUrl(r.originalUrl) && r.sources && r.sources.length > 0)
@@ -486,12 +521,35 @@ export default function App() {
           id: `redirect-${i}`
         }));
       
-      inlinks = (scanResults.inlinks || [])
-        .filter((link: any) => !isOtherLangUrl(link.url))
-        .map((link: any, i: number) => ({
-          ...link,
-          id: `inlink-${i}`
-        }));
+      const mergedInlinks = new Map();
+      (scanResults.inlinks || []).forEach((link: any) => {
+          if (isOtherLangUrl(link.url)) return;
+          
+          // Fast-forward any inlinks pointing to a redirect over to the final destination
+          const resolvedUrl = resolveRedirect(link.url);
+          
+          if (!mergedInlinks.has(resolvedUrl)) {
+              mergedInlinks.set(resolvedUrl, {
+                  url: resolvedUrl,
+                  inlinks: 0,
+                  uniqueInlinks: 0,
+                  sources: [],
+                  seenAnchors: new Set()
+              });
+          }
+          
+          const merged = mergedInlinks.get(resolvedUrl);
+          merged.inlinks += link.inlinks;
+          
+          (link.sources || []).forEach((src: any) => {
+              merged.sources.push(src);
+              if (src.anchor && !merged.seenAnchors.has(src.anchor)) {
+                  merged.seenAnchors.add(src.anchor);
+                  merged.uniqueInlinks += 1;
+              }
+          });
+      });
+      inlinks = Array.from(mergedInlinks.values()).map((link, i) => ({ ...link, id: `inlink-${i}` }));
     }
 
     return { missing, freshness, optimizations, linking, brokenLinks, redirects, inlinks };
