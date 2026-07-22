@@ -56,6 +56,9 @@ export default function App() {
   const [onPageResults, setOnPageResults] = useState<Record<string, any>>({});
   const [analyzingRows, setAnalyzingRows] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  
+  // Language Dropdown UI State
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -817,6 +820,7 @@ export default function App() {
             </h2>
           </div>
             
+          {}
           {activeTab !== 'llm' && languages.length > 0 && (
             <div className="flex items-center gap-4">
               {scanResults && ['linking', 'broken', 'redirects', 'inlinks'].includes(activeTab) && (
@@ -827,24 +831,54 @@ export default function App() {
                   <p className="text-[10px] text-slate-400 mt-0.5">Click "Run Deep Scan" to refresh database</p>
                 </div>
               )}
-              <div className="relative group">
-                <select
-                  value={selectedLang?.code || ''}
-                  onChange={(e) => {
-                    const lang = languages.find(l => l.code === e.target.value);
-                    if (lang) {
-                      setSelectedLang(lang);
-                      setCurrentPage(1);
-                    }
-                  }}
-                  className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-4 pr-10 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer shadow-sm group-hover:bg-slate-100"
+              
+              {/* Modern Custom Dropdown */}
+              <div className="relative">
+                <button 
+                  onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+                  className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 pl-4 pr-3 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm flex items-center gap-2 min-w-[180px] justify-between"
                 >
-                  {languages.map((lang) => (
-                    <option key={lang.code} value={lang.code}>Target Language: {lang.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none group-hover:textindigo-500 transition-colors" />
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
+                      {selectedLang?.code.toUpperCase()}
+                    </span>
+                    <span className="truncate max-w-[100px]">{selectedLang?.name || "Select..."}</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isLangDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {isLangDropdownOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setIsLangDropdownOpen(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden py-1 max-h-[60vh] overflow-y-auto">
+                      <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 bg-slate-50">
+                        Target Language
+                      </div>
+                      {languages.map((lang) => (
+                        <button
+                          key={lang.code}
+                          onClick={() => {
+                            setSelectedLang(lang);
+                            setCurrentPage(1);
+                            setIsLangDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors ${selectedLang?.code === lang.code ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${selectedLang?.code === lang.code ? 'bg-indigo-200 text-indigo-800' : 'bg-slate-100 text-slate-500'}`}>
+                              {lang.code.toUpperCase()}
+                            </span>
+                          <span className="truncate">{lang.name}</span>
+                          {selectedLang?.code === lang.code && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
+              
               <button 
                 onClick={runFullScan} 
                 disabled={isLoading}
@@ -892,6 +926,7 @@ export default function App() {
           </div>
         )}
 
+        {}
         {(isLoading || isConnecting) && (
           <div className="bg-indigo-50 border-b border-indigo-100 px-8 py-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3 flex-1">
@@ -919,13 +954,36 @@ export default function App() {
         <div className="flex-1 overflow-auto p-8 bg-slate-50/50">
           <div className="max-w-6xl mx-auto space-y-6">
 
+            {}
             {activeTab === 'llm' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-8 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
-                  <h3 className="text-lg font-bold text-slate-800 mb-2">Optimize for AI Answer Engines</h3>
-                  <p className="text-slate-600 mb-6 max-w-2xl text-sm">
-                    Analyze any URL to see how easily AI models (like ChatGPT, Perplexity, or Google AI Overviews) can extract and cite your information.
-                  </p>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800 mb-2">Optimize for AI Answer Engines</h3>
+                      <p className="text-slate-600 mb-6 max-w-2xl text-sm">
+                        Analyze any URL to see how easily AI models (like ChatGPT, Perplexity, or Google AI Overviews) can extract and cite your information.
+                      </p>
+                    </div>
+                    {aisoResult && (
+                      <button 
+                        onClick={() => {
+                          const csvContent = [
+                            ['Metric', 'Status', 'Details'],
+                            ...aisoResult.recommendations.map((r: any) => [r.title, r.type, r.desc.replace(/,/g, ';')])
+                          ].map(e => e.join(',')).join('\n');
+                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                          const link = document.createElement('a');
+                          link.href = URL.createObjectURL(blob);
+                          link.download = `aiso_analysis.csv`;
+                          link.click();
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg shadow-sm transition-colors"
+                      >
+                        <Download className="w-4 h-4" /> Export Report
+                      </button>
+                    )}
+                  </div>
                   
                   <div className="flex gap-4">
                     <div className="flex-1">
@@ -934,13 +992,13 @@ export default function App() {
                         placeholder="https://lucid.co/your-page"
                         value={aisoUrl}
                         onChange={(e) => setAisoUrl(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-sm"
                       />
                     </div>
                     <button 
                       onClick={runAisoScan}
                       disabled={isAisoLoading || !aisoUrl}
-                      className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-medium px-8 py-3 rounded-xl transition-all shadow-sm flex items-center gap-2"
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-medium px-8 py-3 rounded-xl transition-all shadow-md flex items-center gap-2"
                     >
                       {isAisoLoading ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <BrainCircuit className="w-5 h-5" />}
                       Analyze
@@ -967,24 +1025,82 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      {aisoResult.recommendations?.map((rec: any, idx: number) => (
-                        <div key={idx} className={`p-5 rounded-xl border flex gap-4 ${rec.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-                          <div className="mt-0.5">
-                            {rec.type === 'success' ? <CheckCircle2 className="w-6 h-6 text-emerald-500" /> : <AlertCircle className="w-6 h-6 text-amber-500" />}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <h5 className="font-semibold text-slate-700 border-b border-slate-200 pb-2">Analysis Results</h5>
+                        {aisoResult.recommendations?.map((rec: any, idx: number) => (
+                          <div key={idx} className={`p-4 rounded-xl border flex gap-3 ${rec.type === 'success' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+                            <div className="mt-0.5 shrink-0">
+                              {rec.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <AlertCircle className="w-5 h-5 text-amber-500" />}
+                            </div>
+                            <div className="flex-1">
+                              <h5 className={`font-semibold mb-1 text-sm ${rec.type === 'success' ? 'text-emerald-900' : 'text-amber-900'}`}>{rec.title}</h5>
+                              <p className={`text-xs leading-relaxed ${rec.type === 'success' ? 'text-emerald-700' : 'text-amber-800'}`}>{rec.desc}</p>
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <h5 className={`font-bold mb-1 ${rec.type === 'success' ? 'text-emerald-900' : 'text-amber-900'}`}>{rec.title}</h5>
-                            <p className={rec.type === 'success' ? 'text-emerald-700' : 'text-amber-800'}>{rec.desc}</p>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+
+                      <div className="space-y-4">
+                         <h5 className="font-semibold text-slate-700 border-b border-slate-200 pb-2">Raw Signals Detected</h5>
+                         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                            <table className="w-full text-sm text-left">
+                                <tbody className="divide-y divide-slate-100">
+                                    <tr>
+                                        <th className="px-4 py-3 bg-slate-50 font-medium text-slate-600 w-1/2">Structured Data (JSON-LD)</th>
+                                        <td className="px-4 py-3 text-slate-800">
+                                            {aisoResult.raw_data?.schema_types?.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {aisoResult.raw_data.schema_types.map((s: string, i: number) => (
+                                                        <span key={i} className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-xs">{s}</span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400 italic">None detected</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th className="px-4 py-3 bg-slate-50 font-medium text-slate-600">Total Word Count</th>
+                                        <td className="px-4 py-3 text-slate-800">{aisoResult.raw_data?.word_count?.toLocaleString() || 0}</td>
+                                    </tr>
+                                    <tr>
+                                        <th className="px-4 py-3 bg-slate-50 font-medium text-slate-600">Words per Paragraph</th>
+                                        <td className="px-4 py-3 text-slate-800">
+                                            <span className={`${(aisoResult.raw_data?.paragraph_density || 0) > 50 ? 'text-amber-600 font-semibold' : ''}`}>
+                                                {aisoResult.raw_data?.paragraph_density || 0}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th className="px-4 py-3 bg-slate-50 font-medium text-slate-600">List Items (ul/ol)</th>
+                                        <td className="px-4 py-3 text-slate-800">{aisoResult.raw_data?.list_count || 0}</td>
+                                    </tr>
+                                    <tr>
+                                        <th className="px-4 py-3 bg-slate-50 font-medium text-slate-600 align-top">Freshness Tags</th>
+                                        <td className="px-4 py-3 text-slate-800">
+                                            {Object.keys(aisoResult.raw_data?.freshness_signals || {}).length > 0 ? (
+                                                <ul className="text-xs space-y-1">
+                                                    {Object.entries(aisoResult.raw_data.freshness_signals).map(([key, val], i) => (
+                                                        <li key={i}><span className="font-mono text-slate-500">{key}:</span> {String(val)}</li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                <span className="text-slate-400 italic">None detected</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                         </div>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
+            {}
             {activeTab === 'optimizations' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1068,6 +1184,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'freshness' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1119,6 +1236,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'missing' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1156,6 +1274,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'linking' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1213,6 +1332,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'broken' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1276,6 +1396,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'inlinks' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1338,6 +1459,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab === 'redirects' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1400,6 +1522,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab !== 'llm' && activeTabArray.length > itemsPerPage && (
                <div className="flex justify-center mt-6 mb-8">
                  <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
