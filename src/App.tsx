@@ -982,13 +982,14 @@ export default function App() {
               </div>
             )}
 
-            {}
+            {/* 404 Finder Tab */}
             {activeTab === 'broken' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
                   <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                     <ShieldAlert className="w-5 h-5 text-indigo-500" /> 404 Finder
                   </h3>
+                  <p className="text-sm text-slate-500 mt-1">Internal links pointing to dead pages.</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-600">
@@ -1002,10 +1003,76 @@ export default function App() {
                     <tbody className="divide-y divide-slate-100">
                       {paginatedData.length > 0 ? paginatedData.map((link: any) => (
                         <Fragment key={link.id}>
-                          <tr onClick={() => toggleRow(link.id)} className={`transition-colors cursor-pointer ${link.inlinks === 0 ? 'bg-red-50/40 hover:bg-red-50/80' : 'hover:bg-indigo-50/50'}`}>
+                          <tr onClick={() => toggleRow(link.id)} className="transition-colors cursor-pointer hover:bg-slate-50">
                             <td className="p-4 font-medium text-slate-800 truncate max-w-sm flex items-center gap-2">
                               {expandedRows[link.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-                              <span className="truncate">{link.url.replace('https://lucid.co', '')}</span>
+                              <span className="truncate">{link.enUrl.replace('https://lucid.co', '')}</span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg font-bold text-red-500">{link.brokenLinksCount || 0}</span>
+                                <span className="text-slate-500 text-xs">links returning 404</span>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                                Fix 404
+                              </span>
+                            </td>
+                          </tr>
+                          {expandedRows[link.id] && link.sources && link.sources.length > 0 && (
+                            <tr className="bg-slate-50">
+                              <td colSpan={3} className="p-4 pl-12 border-t border-slate-100">
+                                <div className="text-sm font-semibold text-slate-700 mb-3">Linked From:</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {link.sources.map((srcUrl: string, idx: number) => (
+                                    <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5">
+                                      <div className="text-xs text-slate-500 truncate" title={srcUrl}>
+                                        <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{srcUrl.replace('https://lucid.co', '')}</a>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )) : (
+                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No broken links found!</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Internal Links Tab */}
+            {activeTab === 'inlinks' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 bg-slate-50">
+                  <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <Network className="w-5 h-5 text-indigo-500" /> Internal Links
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">Discover pages with low internal linking. Pages with 0 inlinks are highlighted in red.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="text-xs uppercase bg-slate-100 text-slate-500">
+                      <tr>
+                        <th className="p-4 font-semibold">Destination URL</th>
+                        <SortableHeader label="Total Inlinks" sortKey="inlinks" />
+                        <SortableHeader label="Unique Anchors" sortKey="uniqueInlinks" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paginatedData.length > 0 ? paginatedData.map((link: any) => (
+                        <Fragment key={link.id}>
+                          <tr onClick={() => toggleRow(link.id)} className={`transition-colors cursor-pointer ${link.inlinks === 0 ? 'bg-red-50/40 hover:bg-red-50/80' : 'hover:bg-slate-50'}`}>
+                            <td className="p-4 font-medium text-slate-800 truncate max-w-sm flex items-center gap-2">
+                              {expandedRows[link.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                              <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <span className="truncate">{link.url.replace('https://lucid.co', '')}</span> <ExternalLink className="w-3 h-3 inline shrink-0" />
+                              </a>
                             </td>
                             <td className="p-4">
                               <span className={`font-bold px-2 py-1 rounded border ${link.inlinks === 0 ? 'text-red-700 bg-red-100 border-red-200' : 'text-indigo-700 bg-indigo-50 border-indigo-100'}`}>
@@ -1014,12 +1081,12 @@ export default function App() {
                             </td>
                             <td className="p-4"><span className="font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{link.uniqueInlinks}</span></td>
                           </tr>
-                          {expandedRows[link.id] && (
+                          {expandedRows[link.id] && link.sources && link.sources.length > 0 && (
                             <tr className="bg-slate-50">
                               <td colSpan={3} className="p-4 pl-12 border-t border-slate-100">
                                 <div className="text-sm font-semibold text-slate-700 mb-3">Sources & Anchor Texts:</div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {link.sources?.map((src: any, idx: number) => (
+                                  {link.sources.map((src: any, idx: number) => (
                                     <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5">
                                       <div className="text-xs text-slate-500 truncate" title={src.url}>
                                         <span className="font-semibold text-slate-400 mr-1">From:</span>
@@ -1034,7 +1101,70 @@ export default function App() {
                           )}
                         </Fragment>
                       )) : (
-                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No internal links found!</td></tr>
+                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No internal links found! Run a Deep Scan.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Redirects Tab */}
+            {activeTab === 'redirects' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 bg-slate-50">
+                  <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <ArrowRight className="w-5 h-5 text-indigo-500" /> Redirects Found
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">Internal links pointing to pages that redirect.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="text-xs uppercase bg-slate-100 text-slate-500">
+                      <tr>
+                        <th className="p-4 font-semibold">Original Link (Found on Page)</th>
+                        <th className="p-4 font-semibold">Final Destination</th>
+                        <th className="p-4 font-semibold">Status Code</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paginatedData.length > 0 ? paginatedData.map((link: any) => (
+                        <Fragment key={link.id}>
+                          <tr onClick={() => toggleRow(link.id)} className="transition-colors cursor-pointer hover:bg-slate-50">
+                            <td className="p-4 max-w-sm truncate flex items-center gap-2">
+                              {expandedRows[link.id] ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                              <span className="text-red-500 line-through decoration-red-300 truncate">{link.originalUrl.replace('https://lucid.co', '')}</span>
+                            </td>
+                            <td className="p-4 max-w-sm truncate">
+                              <a href={link.destinationUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline flex items-center gap-1 font-medium">
+                                {link.destinationUrl.replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline shrink-0" />
+                              </a>
+                            </td>
+                            <td className="p-4">
+                              <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                {link.statusCode} Redirect
+                              </span>
+                            </td>
+                          </tr>
+                          {expandedRows[link.id] && link.sources && link.sources.length > 0 && (
+                            <tr className="bg-slate-50">
+                              <td colSpan={3} className="p-4 pl-12 border-t border-slate-100">
+                                <div className="text-sm font-semibold text-slate-700 mb-3">Linked From:</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {link.sources.map((srcUrl: string, idx: number) => (
+                                    <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col gap-1.5">
+                                      <div className="text-xs text-slate-500 truncate" title={srcUrl}>
+                                        <a href={srcUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{srcUrl.replace('https://lucid.co', '')}</a>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )) : (
+                        <tr><td colSpan={3} className="p-8 text-center text-slate-500">No redirects found!</td></tr>
                       )}
                     </tbody>
                   </table>
