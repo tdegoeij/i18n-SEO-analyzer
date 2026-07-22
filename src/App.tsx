@@ -23,7 +23,6 @@ export default function App() {
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [clusters, setClusters] = useState<any[]>([]);
   
-  // High-performance streaming state
   const [gscData, setGscData] = useState<Record<string, PageData>>({});
   const [lastmods, setLastmods] = useState<Record<string, string>>({});
   
@@ -72,7 +71,6 @@ export default function App() {
     setProgress(0);
     setProgressMsg('Initializing connection...');
     
-    // Clear old state to ensure clean dataset
     setGscData({});
     setClusters([]);
     setLastmods({});
@@ -92,62 +90,71 @@ export default function App() {
       if (!reader) return;
 
       let buffer = '';
+      
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Hold partial line in buffer
+        
+        // ROBUST BRACKET-COUNTING PARSER
+        // Completely ignores missing newlines (}{) and safely parses chunks as they complete
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+        let startIndex = -1;
+        let lastValidIndex = 0;
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const data = JSON.parse(line);
+        for (let i = 0; i < buffer.length; i++) {
+            const char = buffer[i];
             
-            if (data.status === 'progress') {
-              setProgress(prev => Math.min(prev + 5, 90));
-              setProgressMsg(data.message);
-            } 
-            else if (data.status === 'gsc_chunk') {
-              setGscData(prev => ({ ...prev, ...data.result }));
+            if (escapeNext) { escapeNext = false; continue; }
+            if (char === '\\') { escapeNext = true; continue; }
+            if (char === '"') { inString = !inString; continue; }
+
+            if (!inString) {
+                if (char === '{') {
+                    if (depth === 0) startIndex = i;
+                    depth++;
+                } else if (char === '}') {
+                    depth--;
+                    // The exact moment a JSON object is perfectly closed
+                    if (depth === 0 && startIndex !== -1) {
+                        const jsonStr = buffer.substring(startIndex, i + 1);
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            
+                            if (data.status === 'progress') {
+                              setProgress(prev => Math.min(prev + 5, 90));
+                              setProgressMsg(data.message);
+                            } 
+                            else if (data.status === 'gsc_chunk') {
+                              setGscData(prev => ({ ...prev, ...data.result }));
+                            }
+                            else if (data.status === 'complete') {
+                              const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
+                              setLanguages(langs);
+                              if (langs.length > 0) setSelectedLang(langs[0]);
+                              setClusters(data.result.clusters || []);
+                              setLastmods(data.result.lastmods || {});
+                              setProgress(100);
+                              setProgressMsg('Data loaded successfully!');
+                              setTimeout(() => setLoading(false), 1000);
+                            }
+                        } catch (e) {
+                            console.error("Parse error on chunk:", e);
+                        }
+                        
+                        lastValidIndex = i + 1;
+                        startIndex = -1;
+                    }
+                }
             }
-            else if (data.status === 'complete') {
-              const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-              setLanguages(langs);
-              if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
-              setClusters(data.result.clusters || []);
-              setLastmods(data.result.lastmods || {});
-              setProgress(100);
-              setProgressMsg('Data loaded successfully!');
-              setTimeout(() => setLoading(false), 1000);
-            }
-          } catch (e) {
-            console.error("Parse error on chunk line:", e);
-          }
         }
-      }
-      
-      // Buffer safety check for trailing NDJSON objects
-      if (buffer.trim()) {
-        try {
-           const fixes = buffer.split('}{').join('}\n{').split('\n');
-           for (const fix of fixes) {
-               if (!fix.trim()) continue;
-               const data = JSON.parse(fix);
-               if (data.status === 'complete') {
-                  const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-                  setLanguages(langs);
-                  if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
-                  setClusters(data.result.clusters || []);
-                  setLastmods(data.result.lastmods || {});
-                  setProgress(100);
-                  setProgressMsg('Data loaded successfully!');
-                  setTimeout(() => setLoading(false), 1000);
-               }
-           }
-        } catch(err) {
-           console.error("Final buffer safety parse failed:", err);
+        
+        // Immediately shrink the buffer to free RAM and prevent crashes
+        if (lastValidIndex > 0) {
+            buffer = buffer.substring(lastValidIndex);
         }
       }
 
@@ -180,36 +187,49 @@ export default function App() {
       if (!reader) return;
 
       let buffer = '';
+      
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+        let startIndex = -1;
+        let lastValidIndex = 0;
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const data = JSON.parse(line);
-            if (data.progress) setProgress(data.progress);
-            if (data.message) setProgressMsg(data.message);
-            if (data.result) {
-              setScanResults(data.result);
-              setTimeout(() => setLoading(false), 1000);
+        for (let i = 0; i < buffer.length; i++) {
+            const char = buffer[i];
+            if (escapeNext) { escapeNext = false; continue; }
+            if (char === '\\') { escapeNext = true; continue; }
+            if (char === '"') { inString = !inString; continue; }
+
+            if (!inString) {
+                if (char === '{') {
+                    if (depth === 0) startIndex = i;
+                    depth++;
+                } else if (char === '}') {
+                    depth--;
+                    if (depth === 0 && startIndex !== -1) {
+                        const jsonStr = buffer.substring(startIndex, i + 1);
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            if (data.progress) setProgress(data.progress);
+                            if (data.message) setProgressMsg(data.message);
+                            if (data.result) {
+                              setScanResults(data.result);
+                              setTimeout(() => setLoading(false), 1000);
+                            }
+                        } catch (e) {}
+                        lastValidIndex = i + 1;
+                        startIndex = -1;
+                    }
+                }
             }
-          } catch (e) {}
         }
-      }
-      
-      if (buffer.trim()) {
-          try {
-              const data = JSON.parse(buffer);
-              if (data.result) {
-                  setScanResults(data.result);
-                  setTimeout(() => setLoading(false), 1000);
-              }
-          } catch(e) {}
+        if (lastValidIndex > 0) buffer = buffer.substring(lastValidIndex);
       }
     } catch (error) {
       console.error(error);
