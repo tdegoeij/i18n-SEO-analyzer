@@ -9,7 +9,7 @@ import {
 const API_BASE_URL = typeof window !== 'undefined' && 
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
-  : 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com';
+  : 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com'; // Use your real Heroku URL here!
 
 interface Language {
   code: string;
@@ -27,7 +27,7 @@ export default function App() {
   const [lastmods, setLastmods] = useState<Record<string, string>>({});
   const [gscData, setGscData] = useState<any>({});
   
-  // Store results mapped by language code to persist across dropdown switches
+  // Database Caching Maps
   const [scanResultsMap, setScanResultsMap] = useState<Record<string, any>>({});
   const [lastScanDatesMap, setLastScanDatesMap] = useState<Record<string, string>>({});
 
@@ -39,11 +39,6 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState('');
-
-  // Derived state for the currently selected language
-  const scanResults = selectedLang ? scanResultsMap[selectedLang.code] : null;
-  const lastScanDateStr = selectedLang ? lastScanDatesMap[selectedLang.code] : null;
-  const lastScanDate = lastScanDateStr ? new Date(lastScanDateStr) : null;
   
   // Pagination & Filter State
   const [currentPage, setCurrentPage] = useState(1);
@@ -51,22 +46,24 @@ export default function App() {
   const [minImpressions, setMinImpressions] = useState<number | ''>('');
   const itemsPerPage = 100;
 
-  // AISO State (LLM Optimizer)
+  // AISO State
   const [aisoUrl, setAisoUrl] = useState('');
   const [aisoResult, setAisoResult] = useState<any>(null);
   const [isAisoLoading, setIsAisoLoading] = useState(false);
 
-  // On-Page Analysis State
+  // On-Page State
   const [customKeywords, setCustomKeywords] = useState<Record<string, string>>({});
   const [onPageResults, setOnPageResults] = useState<Record<string, any>>({});
   const [analyzingRows, setAnalyzingRows] = useState<Record<string, boolean>>({});
-
-  // Expanded Rows State for 404s and Redirects
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
+
+  const scanResults = selectedLang ? scanResultsMap[selectedLang.code] : null;
+  const lastScanDateStr = selectedLang ? lastScanDatesMap[selectedLang.code] : null;
+  const lastScanDate = lastScanDateStr ? new Date(lastScanDateStr) : null;
 
   const getActiveTabArrayRaw = (): any[] => {
     switch (activeTab) {
@@ -118,6 +115,7 @@ export default function App() {
       });
     }
 
+    // Sorting
     if (sortConfig) {
       data.sort((a, b) => {
         let aVal = a[sortConfig.key];
@@ -163,6 +161,19 @@ export default function App() {
     }
   };
 
+  const isOtherLangUrl = (url: string) => {
+    if (!selectedLang || !url) return false;
+    try {
+      const path = new URL(url).pathname;
+      return languages.some(lang => 
+        lang.code !== selectedLang.code && 
+        (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
+      );
+    } catch {
+      return false;
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
@@ -187,8 +198,6 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('gsc_token');
-    sessionStorage.removeItem('seoBaseData');
-    sessionStorage.removeItem('seoScanResults');
     setIsAuthenticated(false);
     setLanguages([]);
     setClusters([]);
@@ -198,42 +207,13 @@ export default function App() {
     setSelectedLang(null);
   };
 
-  const fetchBaseData = async (authToken: string) => {
-    // 1. Check if we already have this data cached in the browser for this session
-    try {
-      const cachedBase = sessionStorage.getItem('seoBaseData');
-      const cachedScans = sessionStorage.getItem('seoScanResults');
-      
-      if (cachedBase) {
-        const parsed = JSON.parse(cachedBase);
-        setLanguages(parsed.languages || []);
-        setClusters(parsed.clusters || []);
-        setLastmods(parsed.lastmods || {});
-        setGscData(parsed.gscData || {});
-        
-        if (parsed.languages?.length > 0) {
-          setSelectedLang(parsed.languages[0]);
-        }
-        
-        if (cachedScans) {
-          const parsedScans = JSON.parse(cachedScans);
-          setScanResultsMap(parsedScans.scans || {});
-          setLastScanDatesMap(parsedScans.dates || {});
-        }
-        
-        setIsConnecting(false);
-        return; // Exit early! Data loaded instantly from cache.
-      }
-    } catch (e) {
-      console.warn("Could not load from cache", e);
-    }
-
+  const fetchBaseData = async (authToken: string, forceRefresh: boolean = false) => {
     setIsConnecting(true);
     setError('');
-    setProgressMsg('Connecting to Google...');
+    setProgressMsg('Fetching from database...');
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/data`, {
+      const response = await fetch(`${API_BASE_URL}/api/data?force_refresh=${forceRefresh}`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       
@@ -272,26 +252,18 @@ export default function App() {
             if (data.status === 'complete') {
               const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
               setLanguages(langs);
-              if (langs.length > 0) setSelectedLang(langs[0]);
+              if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
               setClusters(data.result.clusters);
               setLastmods(data.result.lastmods || {});
               setGscData(data.result.gsc);
               
-              // Save to SessionStorage so it survives a page refresh
-              try {
-                sessionStorage.setItem('seoBaseData', JSON.stringify({
-                  languages: langs,
-                  clusters: data.result.clusters,
-                  lastmods: data.result.lastmods || {},
-                  gscData: data.result.gsc
-                }));
-              } catch (e) {
-                console.warn("Base data too large to cache in browser memory.");
+              if (data.cached_scans) {
+                setScanResultsMap(data.cached_scans);
+                setLastScanDatesMap(data.cached_dates);
               }
             }
           } catch (e: any) {
             console.error("Error parsing chunk", e);
-            throw e;
           }
         }
         jsonStr = lines[lines.length - 1];
@@ -348,25 +320,12 @@ export default function App() {
             if (data.result) {
               const currentDate = new Date().toISOString();
               
-              // Update state maps
+              // Persist seamlessly into maps
               setScanResultsMap(prev => ({ ...prev, [selectedLang.code]: data.result }));
               setLastScanDatesMap(prev => ({ ...prev, [selectedLang.code]: currentDate }));
-              
-              // Save to cache
-              try {
-                const nextScans = { ...scanResultsMap, [selectedLang.code]: data.result };
-                const nextDates = { ...lastScanDatesMap, [selectedLang.code]: currentDate };
-                sessionStorage.setItem('seoScanResults', JSON.stringify({
-                  scans: nextScans,
-                  dates: nextDates
-                }));
-              } catch (e) {
-                console.warn("Scan results too large to cache in browser memory.");
-              }
             }
           } catch (e: any) {
             console.error("Error parsing scan chunk", e);
-            throw e;
           }
         }
         jsonStr = lines[lines.length - 1];
@@ -454,7 +413,7 @@ export default function App() {
         };
       });
 
-    // Missing Translations (Filter out 301s so we only see valid EN pages to translate)
+    // Missing Translations
     const knownRedirects = new Set(scanResults?.redirects?.map((r: any) => r.originalUrl) || []);
     
     const missing = clusters
@@ -489,22 +448,8 @@ export default function App() {
     let inlinks: any[] = [];
 
     if (scanResults) {
-      // Helper to filter out language switcher noise (e.g. /de/ links in an /nl/ scan)
-      const isOtherLangUrl = (url: string) => {
-        if (!selectedLang || !url) return false;
-        try {
-          const path = new URL(url).pathname;
-          return languages.some(lang => 
-            lang.code !== selectedLang.code && 
-            (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
-          );
-        } catch {
-          return false;
-        }
-      };
-
-      linking = scanResults.opportunities
-        .filter((opp: any) => isEnglishUrl(opp.enLink))
+      linking = (scanResults.opportunities || [])
+        .filter((opp: any) => isEnglishUrl(opp.enLink) && !isOtherLangUrl(opp.source))
         .map((opp: any, i: number) => ({
           id: `link-${i}`,
           enUrl: opp.enLink,
@@ -515,8 +460,8 @@ export default function App() {
         }));
 
       const brokenMap = new Map();
-      scanResults.brokenLinks?.forEach((bl: any) => {
-        if (isOtherLangUrl(bl.brokenLink)) return; // Filter out foreign language 404s
+      (scanResults.brokenLinks || []).forEach((bl: any) => {
+        if (isOtherLangUrl(bl.brokenLink) || isOtherLangUrl(bl.source)) return;
 
         if (!brokenMap.has(bl.brokenLink)) {
           brokenMap.set(bl.brokenLink, {
@@ -527,7 +472,7 @@ export default function App() {
           });
         }
         const item = brokenMap.get(bl.brokenLink);
-        if (!item.sources.includes(bl.source)) {
+        if (!item.sources.includes(bl.source) && bl.source !== "Sitemap Check") {
           item.sources.push(bl.source);
         }
         item.brokenLinksCount += 1;
@@ -535,14 +480,14 @@ export default function App() {
       brokenLinks = Array.from(brokenMap.values());
 
       redirects = (scanResults.redirects || [])
-        .filter((r: any) => !isOtherLangUrl(r.originalUrl) && r.sources && r.sources.length > 0) // Filter out foreign language & sitemap-only redirects
+        .filter((r: any) => !isOtherLangUrl(r.originalUrl) && r.sources && r.sources.length > 0)
         .map((r: any, i: number) => ({
           ...r,
           id: `redirect-${i}`
         }));
       
       inlinks = (scanResults.inlinks || [])
-        .filter((link: any) => !isOtherLangUrl(link.url)) // Filter out foreign language inlinks
+        .filter((link: any) => !isOtherLangUrl(link.url))
         .map((link: any, i: number) => ({
           ...link,
           id: `inlink-${i}`
@@ -617,8 +562,18 @@ export default function App() {
           </div>
           <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mt-4 mb-2">Connected Project</p>
           <div className="bg-slate-800 rounded-lg p-2 text-sm text-slate-300 flex items-center justify-between">
-            <span className="truncate">lucid.co</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="truncate flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              lucid.co
+            </span>
+            <button 
+              onClick={() => fetchBaseData(localStorage.getItem('gsc_token') || '', true)}
+              disabled={isConnecting}
+              title="Force Refresh Sitemap & GSC Data"
+              className="hover:bg-slate-700 hover:text-white p-1.5 rounded transition-colors disabled:opacity-50"
+            >
+              <RefreshCcw className={`w-3.5 h-3.5 ${isConnecting ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
 
@@ -686,8 +641,6 @@ export default function App() {
                     const lang = languages.find(l => l.code === e.target.value);
                     if (lang) {
                       setSelectedLang(lang);
-                      // We removed the setScanResults(null) wipe here! 
-                      // It now safely retains the data when you switch back.
                       setCurrentPage(1);
                     }
                   }}
@@ -740,6 +693,7 @@ export default function App() {
           </div>
         )}
 
+        {}
         {(isLoading || isConnecting) && (
           <div className="bg-indigo-50 border-b border-indigo-100 px-8 py-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3 flex-1">
@@ -767,7 +721,6 @@ export default function App() {
         <div className="flex-1 overflow-auto p-8 bg-slate-50/50">
           <div className="max-w-6xl mx-auto space-y-6">
 
-            {}
             {activeTab === 'llm' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-8 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
@@ -918,7 +871,6 @@ export default function App() {
               </div>
             )}
 
-            {}
             {activeTab === 'freshness' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -970,7 +922,6 @@ export default function App() {
               </div>
             )}
 
-            {}
             {activeTab === 'missing' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -1008,7 +959,6 @@ export default function App() {
               </div>
             )}
 
-            {}
             {activeTab === 'linking' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1066,7 +1016,6 @@ export default function App() {
               </div>
             )}
 
-            {/* 404 Finder Tab */}
             {activeTab === 'broken' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1130,7 +1079,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Internal Links Tab */}
             {activeTab === 'inlinks' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1193,7 +1141,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Redirects Tab */}
             {activeTab === 'redirects' && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 bg-slate-50">
@@ -1256,6 +1203,7 @@ export default function App() {
               </div>
             )}
 
+            {}
             {activeTab !== 'llm' && getActiveTabArray().length > itemsPerPage && (
                <div className="flex justify-center mt-6">
                  <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
