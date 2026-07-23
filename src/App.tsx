@@ -731,7 +731,7 @@ export default function App() {
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
           <div className="p-8 text-center bg-gradient-to-br from-indigo-600 to-blue-700">
             <Globe2 className="w-16 h-16 text-white mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-white mb-2">i18n SEO Analyzer</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">i18n Content Analysis</h1>
             <p className="text-indigo-100">Automate your international AI & SEO strategy.</p>
           </div>
           <div className="p-8 text-center">
@@ -755,7 +755,7 @@ export default function App() {
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center gap-3 text-white mb-2">
             <Globe2 className="w-8 h-8 text-indigo-400" />
-            <span className="text-xl font-bold">i18n SEO</span>
+            <span className="text-xl font-bold">i18n Content Analysis</span>
           </div>
           <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mt-4 mb-2">Connected Project</p>
           <div className="bg-slate-800 rounded-lg p-2 text-sm text-slate-300 flex items-center justify-between">
