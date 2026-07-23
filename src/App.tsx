@@ -42,7 +42,7 @@ export default function App() {
     if (!code) return '🌐';
     const baseCode = code.split('-')[0].toLowerCase();
     const flags: Record<string, string> = {
-      en: '🇬🇧', nl: '🇳🇱', de: '🇩🇪', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹', 
+      en: '🇺🇸', nl: '🇳🇱', de: '🇩🇪', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹', 
       pt: '🇵🇹', da: '🇩🇰', sv: '🇸🇪', no: '🇳🇴', fi: '🇫🇮', pl: '🇵🇱', 
       ja: '🇯🇵', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', tr: '🇹🇷', cs: '🇨🇿', 
       hu: '🇭🇺', ro: '🇷🇴', el: '🇬🇷', bg: '🇧🇬', uk: '🇺🇦', id: '🇮🇩', 
@@ -163,7 +163,8 @@ export default function App() {
     if (!url) return false;
     try {
       const path = new URL(url).pathname;
-      return !languages.some(lang => path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`);
+      const knownLangs = languages.filter(l => l.code !== 'en');
+      return !knownLangs.some(lang => path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`);
     } catch {
       return true;
     }
@@ -173,7 +174,13 @@ export default function App() {
     if (!selectedLang || !url) return false;
     try {
       const path = new URL(url).pathname;
-      return languages.some(lang => 
+      const knownLangs = languages.filter(l => l.code !== 'en');
+      
+      if (selectedLang.code === 'en') {
+        return knownLangs.some(lang => path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`);
+      }
+      
+      return knownLangs.some(lang => 
         lang.code !== selectedLang.code && 
         (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
       );
@@ -249,8 +256,9 @@ export default function App() {
               const data = JSON.parse(jsonStr);
               if (data.status === 'complete') {
                 const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-                setLanguages(langs);
-                if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
+                const allLangs = [{ code: 'en', name: 'EN' }, ...langs];
+                setLanguages(allLangs);
+                if (allLangs.length > 0 && !selectedLang) setSelectedLang(allLangs[0]);
                 setClusters(data.result.clusters);
                 setLastmods(data.result.lastmods || {});
                 setGscData(data.result.gsc);
@@ -263,8 +271,9 @@ export default function App() {
                       const data = JSON.parse(fix);
                       if (data.status === 'complete') {
                           const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-                          setLanguages(langs);
-                          if (langs.length > 0 && !selectedLang) setSelectedLang(langs[0]);
+                          const allLangs = [{ code: 'en', name: 'EN' }, ...langs];
+                          setLanguages(allLangs);
+                          if (allLangs.length > 0 && !selectedLang) setSelectedLang(allLangs[0]);
                           setClusters(data.result.clusters);
                           setLastmods(data.result.lastmods || {});
                           setGscData(data.result.gsc);
@@ -292,8 +301,9 @@ export default function App() {
             }
             if (data.status === 'complete') {
               const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-              setLanguages(langs);
-              if (langs.length > 0) setSelectedLang(langs[0]);
+              const allLangs = [{ code: 'en', name: 'EN' }, ...langs];
+              setLanguages(allLangs);
+              if (allLangs.length > 0) setSelectedLang(allLangs[0]);
               setClusters(data.result.clusters);
               setLastmods(data.result.lastmods || {});
               setGscData(data.result.gsc);
@@ -697,7 +707,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex-1 py-4 flex flex-col gap-1 px-3 overflow-y-auto">
+<nav className="flex-1 py-4 flex flex-col gap-1 px-3 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">AI & Content Tools</div>
           <button onClick={() => { setActiveTab('llm'); setCurrentPage(1); setSortConfig(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'llm' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <BrainCircuit className="w-5 h-5" /> LLM Optimizer
@@ -708,17 +718,24 @@ export default function App() {
           <button onClick={() => { setActiveTab('freshness'); setCurrentPage(1); setSortConfig({key: 'impressions', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'freshness' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Clock className="w-5 h-5" /> Content Freshness
           </button>
-          <button onClick={() => { setActiveTab('missing'); setCurrentPage(1); setSortConfig({key: 'globalImpressions', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'missing' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
-            <FileText className="w-5 h-5" /> Missing Translations
-          </button>
+          
+          {selectedLang?.code !== 'en' && (
+            <button onClick={() => { setActiveTab('missing'); setCurrentPage(1); setSortConfig({key: 'globalImpressions', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'missing' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+              <FileText className="w-5 h-5" /> Missing Translations
+            </button>
+          )}
 
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2 px-3">Technical SEO</div>
           <button onClick={() => { setActiveTab('inlinks'); setCurrentPage(1); setSortConfig({key: 'inlinks', direction: 'asc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'inlinks' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Network className="w-5 h-5" /> Internal Links
           </button>
-          <button onClick={() => { setActiveTab('linking'); setCurrentPage(1); setSortConfig(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'linking' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
-            <LinkIcon className="w-5 h-5" /> Link Updates
-          </button>
+          
+          {selectedLang?.code !== 'en' && (
+            <button onClick={() => { setActiveTab('linking'); setCurrentPage(1); setSortConfig(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'linking' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+              <LinkIcon className="w-5 h-5" /> Link Updates
+            </button>
+          )}
+          
           <button onClick={() => { setActiveTab('broken'); setCurrentPage(1); setSortConfig({key: 'brokenLinksCount', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'broken' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <ShieldAlert className="w-5 h-5" /> 404 Finder
           </button>
@@ -782,6 +799,9 @@ export default function App() {
                         <button
                           key={lang.code}
                           onClick={() => {
+                            if (lang.code === 'en' && ['missing', 'linking'].includes(activeTab)) {
+                                setActiveTab('optimizations');
+                            }
                             setSelectedLang(lang);
                             setScanResults(null);
                             setLastScanDate(null);
