@@ -37,6 +37,19 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState('');
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const getFlagEmoji = (code: string) => {
+    if (!code) return '🌐';
+    const baseCode = code.split('-')[0].toLowerCase();
+    const flags: Record<string, string> = {
+      en: '🇬🇧', nl: '🇳🇱', de: '🇩🇪', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹', 
+      pt: '🇵🇹', da: '🇩🇰', sv: '🇸🇪', no: '🇳🇴', fi: '🇫🇮', pl: '🇵🇱', 
+      ja: '🇯🇵', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', tr: '🇹🇷', cs: '🇨🇿', 
+      hu: '🇭🇺', ro: '🇷🇴', el: '🇬🇷', bg: '🇧🇬', uk: '🇺🇦', id: '🇮🇩', 
+      th: '🇹🇭', vi: '🇻🇳', ar: '🇦🇪'
+    };
+    return flags[baseCode] || '🌐';
+};
   
   // Pagination & Filter State
   const [currentPage, setCurrentPage] = useState(1);
@@ -153,6 +166,19 @@ export default function App() {
       return !languages.some(lang => path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`);
     } catch {
       return true;
+    }
+  };
+
+  const isOtherLangUrl = (url: string) => {
+    if (!selectedLang || !url) return false;
+    try {
+      const path = new URL(url).pathname;
+      return languages.some(lang => 
+        lang.code !== selectedLang.code && 
+        (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
+      );
+    } catch {
+      return false;
     }
   };
 
@@ -509,11 +535,18 @@ export default function App() {
       });
       brokenLinks = Array.from(brokenMap.values());
 
-      redirects = (scanResults.redirects || []).map((r: any, i: number) => ({
-        ...r,
-        id: `redirect-${i}`
-      }));
-      
+      redirects = (scanResults.redirects || [])
+        .filter((r: any) => 
+          !isOtherLangUrl(r.originalUrl) && 
+          !isOtherLangUrl(r.destinationUrl) && 
+          r.sources && 
+          r.sources.length > 0 &&
+          r.sources.some((s: string) => s !== "Sitemap Check" && s !== "Missing Translation Check") 
+        )
+        .map((r: any, i: number) => ({
+          ...r,
+          id: `redirect-${i}`
+        }));
       inlinks = (scanResults.inlinks || []).map((link: any, i: number) => ({
         ...link,
         id: `inlink-${i}`
@@ -716,30 +749,57 @@ export default function App() {
               {scanResults && ['linking', 'broken', 'redirects', 'inlinks'].includes(activeTab) && (
                 <div className="text-right mr-2 hidden lg:block">
                   <p className="text-xs font-medium text-slate-500 flex items-center justify-end gap-1">
-                    <Clock className="w-3.5 h-3.5" /> Data from last scan {lastScanDate ? `(${lastScanDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})` : ''}
+                    <Clock className="w-3.5 h-3.5" /> Last scan {lastScanDate ? `${lastScanDate}` : ''}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Click "Run Deep Scan" to refresh database</p>
                 </div>
               )}
-              <div className="relative group">
-                <select
-                  value={selectedLang?.code || ''}
-                  onChange={(e) => {
-                    const lang = languages.find(l => l.code === e.target.value);
-                    if (lang) {
-                      setSelectedLang(lang);
-                      setScanResults(null);
-                      setLastScanDate(null);
-                      setCurrentPage(1);
-                    }
-                  }}
-                  className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-4 pr-10 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all cursor-pointer shadow-sm group-hover:bg-slate-100"
+              <div className="relative z-50">
+                <button 
+                  onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+                  className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 pl-3 pr-3 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm flex items-center gap-2 min-w-[150px] justify-between"
                 >
-                  {languages.map((lang) => (
-                    <option key={lang.code} value={lang.code}>Target Language: {lang.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none group-hover:text-indigo-500 transition-colors" />
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center justify-center">
+                      {getFlagEmoji(selectedLang?.code || '')}
+                    </span>
+                    <span className="truncate">{selectedLang?.name || "Select"}</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isLangDropdownOpen ? 'rotate-180 text-indigo-500' : ''}`} />
+                </button>
+                
+                {isLangDropdownOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setIsLangDropdownOpen(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 min-w-[150px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden py-1.5 max-h-[60vh] overflow-y-auto ring-1 ring-black/5">
+                      <div className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 mb-1">
+                        Select Language
+                      </div>
+                      {languages.map((lang) => (
+                        <button
+                          key={lang.code}
+                          onClick={() => {
+                            setSelectedLang(lang);
+                            setScanResults(null);
+                            setLastScanDate(null);
+                            setCurrentPage(1);
+                            setIsLangDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors ${selectedLang?.code === lang.code ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                        >
+                           <span className="flex items-center justify-center">
+                              {getFlagEmoji(lang.code)}
+                            </span>
+                          <span className="truncate">{lang.name}</span>
+                          {selectedLang?.code === lang.code && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0 text-indigo-600" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               <button 
                 onClick={runFullScan} 

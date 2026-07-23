@@ -95,6 +95,18 @@
   }
 }
 
+.options {
+  display: flex;
+  flex-direction: column;
+  border-radius: 5px;
+  padding: 5px;
+  background-color: #2a2f3b;
+  position: relative;
+  top: -100px;
+  opacity: 0;
+  transition: 300ms;
+}
+
 #docs {
   border-right: 1px solid var(--border);
 
