@@ -1,12 +1,12 @@
 import { useState, useEffect, Fragment } from 'react';
-import { 
-  AlertCircle, CheckCircle2, ChevronRight, ChevronDown, ExternalLink, 
-  Globe2, Link as LinkIcon, Search, LogOut, 
+import {
+  AlertCircle, CheckCircle2, ChevronRight, ChevronDown, ExternalLink,
+  Globe2, Link as LinkIcon, Search, LogOut,
   FileText, BrainCircuit, Activity, ArrowRight,
   ShieldAlert, RefreshCcw, Network, Clock, ArrowUpDown, ArrowUp, ArrowDown, Download
 } from 'lucide-react';
 
-const API_BASE_URL = typeof window !== 'undefined' && 
+const API_BASE_URL = typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
   : 'https://i18n-seo-analyzer-3d2678f53f5d.herokuapp.com';
@@ -32,7 +32,7 @@ export default function App() {
   // UI State
   const [selectedLang, setSelectedLang] = useState<Language | null>(null);
   const [activeTab, setActiveTab] = useState('llm');
-  const [sortConfig, setSortConfig] = useState<{key: string, direction: 'asc' | 'desc'} | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
@@ -42,15 +42,15 @@ export default function App() {
     if (!code) return '🌐';
     const baseCode = code.split('-')[0].toLowerCase();
     const flags: Record<string, string> = {
-      en: '🇺🇸', nl: '🇳🇱', de: '🇩🇪', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹', 
-      pt: '🇵🇹', da: '🇩🇰', sv: '🇸🇪', no: '🇳🇴', fi: '🇫🇮', pl: '🇵🇱', 
-      ja: '🇯🇵', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', tr: '🇹🇷', cs: '🇨🇿', 
-      hu: '🇭🇺', ro: '🇷🇴', el: '🇬🇷', bg: '🇧🇬', uk: '🇺🇦', id: '🇮🇩', 
+      en: '🇺🇸', nl: '🇳🇱', de: '🇩🇪', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹',
+      pt: '🇵🇹', da: '🇩🇰', sv: '🇸🇪', no: '🇳🇴', fi: '🇫🇮', pl: '🇵🇱',
+      ja: '🇯🇵', zh: '🇨🇳', ko: '🇰🇷', ru: '🇷🇺', tr: '🇹🇷', cs: '🇨🇿',
+      hu: '🇭🇺', ro: '🇷🇴', el: '🇬🇷', bg: '🇧🇬', uk: '🇺🇦', id: '🇮🇩',
       th: '🇹🇭', vi: '🇻🇳', ar: '🇦🇪'
     };
     return flags[baseCode] || '🌐';
-};
-  
+  };
+
   // Pagination & Filter State
   const [currentPage, setCurrentPage] = useState(1);
   const [urlFilter, setUrlFilter] = useState('');
@@ -95,15 +95,15 @@ export default function App() {
       const lowerFilter = urlFilter.toLowerCase();
       data = data.filter(item => {
         const urls = [
-          item.url, 
-          item.enUrl, 
-          item.originalLink, 
-          item.destinationUrl, 
+          item.url,
+          item.enUrl,
+          item.originalLink,
+          item.destinationUrl,
           item.sourceUrl,
           item.brokenLink,
           ...(item.localizedUrls ? Object.values(item.localizedUrls) : [])
         ].filter(Boolean).map(u => String(u).toLowerCase());
-        
+
         return urls.some(u => u.includes(lowerFilter));
       });
     }
@@ -116,7 +116,7 @@ export default function App() {
         if (item.globalImpressions !== undefined) imp = item.globalImpressions;
         else if (item.localImpressions && selectedLang) imp = item.localImpressions[selectedLang.code];
         else if (item.impressions !== undefined) imp = item.impressions;
-        
+
         if (imp !== undefined) {
           return imp >= minImp;
         }
@@ -128,7 +128,7 @@ export default function App() {
       data.sort((a, b) => {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
-        
+
         if (sortConfig.key === 'localImpressions') {
           aVal = a.localImpressions?.[selectedLang?.code || ''] || 0;
           bVal = b.localImpressions?.[selectedLang?.code || ''] || 0;
@@ -175,13 +175,13 @@ export default function App() {
     try {
       const path = new URL(url).pathname;
       const knownLangs = languages.filter(l => l.code !== 'en');
-      
+
       if (selectedLang.code === 'en') {
         return knownLangs.some(lang => path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`);
       }
-      
-      return knownLangs.some(lang => 
-        lang.code !== selectedLang.code && 
+
+      return knownLangs.some(lang =>
+        lang.code !== selectedLang.code &&
         (path.startsWith(`/${lang.code}/`) || path === `/${lang.code}`)
       );
     } catch {
@@ -192,7 +192,7 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
-    
+
     if (urlToken) {
       localStorage.setItem('gsc_token', urlToken);
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -226,12 +226,12 @@ export default function App() {
     setIsConnecting(true);
     setError('');
     setProgressMsg('Connecting to Google...');
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/data`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
-      
+
       if (!response.ok) {
         if (response.status === 401) {
           handleLogout();
@@ -242,13 +242,13 @@ export default function App() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      
+
       if (!reader) throw new Error('Streaming not supported');
 
       let jsonStr = '';
       while (true) {
         const { value, done } = await reader.read();
-        
+
         // CRITICAL FIX: Safe Fallback Parser if stream ends without newline
         if (done) {
           if (jsonStr.trim()) {
@@ -267,35 +267,35 @@ export default function App() {
               // Handle potentially concatenated/mushed objects
               const fixes = jsonStr.split('}{').join('}\n{').split('\n');
               for (const fix of fixes) {
-                  try {
-                      const data = JSON.parse(fix);
-                      if (data.status === 'complete') {
-                          const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
-                          const allLangs = [{ code: 'en', name: 'EN' }, ...langs];
-                          setLanguages(allLangs);
-                          if (allLangs.length > 0 && !selectedLang) setSelectedLang(allLangs[0]);
-                          setClusters(data.result.clusters);
-                          setLastmods(data.result.lastmods || {});
-                          setGscData(data.result.gsc);
-                      }
-                  } catch (err) {}
+                try {
+                  const data = JSON.parse(fix);
+                  if (data.status === 'complete') {
+                    const langs: Language[] = data.result.languages.map((l: string) => ({ code: l, name: l.toUpperCase() }));
+                    const allLangs = [{ code: 'en', name: 'EN' }, ...langs];
+                    setLanguages(allLangs);
+                    if (allLangs.length > 0 && !selectedLang) setSelectedLang(allLangs[0]);
+                    setClusters(data.result.clusters);
+                    setLastmods(data.result.lastmods || {});
+                    setGscData(data.result.gsc);
+                  }
+                } catch (err) { }
               }
             }
           }
           break;
         }
-        
+
         jsonStr += decoder.decode(value, { stream: true });
         const lines = jsonStr.split('\n');
-        
+
         for (let i = 0; i < lines.length - 1; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          
+
           try {
             const data = JSON.parse(line);
             if (data.error) throw new Error(data.error);
-            
+
             if (data.status === 'progress') {
               setProgressMsg(data.message);
             }
@@ -343,13 +343,13 @@ export default function App() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      
+
       if (!reader) throw new Error('Streaming not supported');
 
       let jsonStr = '';
       while (true) {
         const { value, done } = await reader.read();
-        
+
         // CRITICAL FIX: Safe Fallback Parser if stream ends without newline
         if (done) {
           if (jsonStr.trim()) {
@@ -362,30 +362,30 @@ export default function App() {
             } catch (e) {
               const fixes = jsonStr.split('}{').join('}\n{').split('\n');
               for (const fix of fixes) {
-                  try {
-                      const data = JSON.parse(fix);
-                      if (data.result) {
-                          setScanResults(data.result);
-                          setLastScanDate(new Date());
-                      }
-                  } catch (err) {}
+                try {
+                  const data = JSON.parse(fix);
+                  if (data.result) {
+                    setScanResults(data.result);
+                    setLastScanDate(new Date());
+                  }
+                } catch (err) { }
               }
             }
           }
           break;
         }
-        
+
         jsonStr += decoder.decode(value, { stream: true });
         const lines = jsonStr.split('\n');
-        
+
         for (let i = 0; i < lines.length - 1; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          
+
           try {
             const data = JSON.parse(line);
             if (data.error) throw new Error(data.error);
-            
+
             if (data.progress) setProgress(data.progress);
             if (data.message) setProgressMsg(data.message);
             if (data.result) {
@@ -410,17 +410,17 @@ export default function App() {
     if (!aisoUrl) return;
     setIsAisoLoading(true);
     setError('');
-    
+
     try {
       const url = new URL(`${API_BASE_URL}/api/analyze_aiso`);
       url.searchParams.append('url', aisoUrl);
 
       const response = await fetch(url.toString());
       if (!response.ok) throw new Error('Failed to analyze page.');
-      
+
       const data = await response.json();
       if (data.error) throw new Error(data.error);
-      
+
       setAisoResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -441,7 +441,7 @@ export default function App() {
 
       const response = await fetch(targetUrl.toString());
       if (!response.ok) throw new Error('Analysis failed');
-      
+
       const data = await response.json();
       setOnPageResults((prev: Record<string, any>) => ({ ...prev, [pageId]: data }));
     } catch (err) {
@@ -454,38 +454,53 @@ export default function App() {
   const getFilteredData = () => {
     if (!selectedLang) return { missing: [], freshness: [], optimizations: [], linking: [], brokenLinks: [], redirects: [], inlinks: [] };
 
-    // Content Freshness
+    // --- UNIFIED REDIRECT RESOLVER ---
+    const knownRedirectsMap = new Map();
+    (scanResults?.redirects || []).forEach((r: any) => {
+      knownRedirectsMap.set(r.originalUrl, r.destinationUrl);
+    });
+
+    const resolveRedirect = (url: string) => {
+      let currentUrl = url;
+      let iterations = 0;
+      while (iterations < 5 && knownRedirectsMap.has(currentUrl)) {
+        currentUrl = knownRedirectsMap.get(currentUrl);
+        iterations++;
+      }
+      return currentUrl;
+    };
+
+    const isRedirectSource = (url: string) => knownRedirectsMap.has(url);
+    // ----------------------------------
+
     const freshness = clusters
-      .filter(c => c[selectedLang?.code])
+      .filter(c => c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
         const lastModStr = lastmods[localUrl] || lastmods[c.en] || null;
-        
+
         let isStale = false;
         let daysOld = 0;
         if (lastModStr) {
-            const diffTime = Math.abs(new Date().getTime() - new Date(lastModStr).getTime());
-            daysOld = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            isStale = daysOld > 90;
+          const diffTime = Math.abs(new Date().getTime() - new Date(lastModStr).getTime());
+          daysOld = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          isStale = daysOld > 90;
         } else {
-            isStale = true;
+          isStale = true;
         }
-        
+
         return {
-            id: `fresh-${i}`,
-            url: localUrl,
-            lastMod: lastModStr,
-            daysOld,
-            isStale,
-            impressions: gscData[localUrl]?.impressions || 0
+          id: `fresh-${i}`,
+          url: localUrl,
+          lastMod: lastModStr,
+          daysOld,
+          isStale,
+          impressions: gscData[localUrl]?.impressions || 0
         };
       });
 
-    // Missing Translations (Filter out 301s so we only see valid EN pages to translate)
-    const knownRedirects = new Set(scanResults?.redirects?.map((r: any) => r.originalUrl) || []);
-    
     const missing = clusters
-      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !knownRedirects.has(c.en))
+      .filter(c => c.en && isEnglishUrl(c.en) && !c[selectedLang?.code] && !isRedirectSource(c.en))
       .map((c, i) => ({
         id: `missing-${i}`,
         enUrl: c.en,
@@ -494,15 +509,15 @@ export default function App() {
         action: 'Translate'
       }));
 
-    // GSC Optimizations
     const optimizations = clusters
-      .filter(c => c.en && c[selectedLang?.code])
+      .filter(c => c.en && c[selectedLang?.code] && !isRedirectSource(c[selectedLang?.code]))
       .map((c, i) => {
         const localUrl = c[selectedLang?.code];
+        const enUrlFallback = c.en || localUrl;
         const localData = gscData[localUrl] || { impressions: 0, topKeyword: 'N/A' };
         return {
           id: `opt-${i}`,
-          enUrl: c.en,
+          enUrl: enUrlFallback,
           localizedUrls: c,
           localImpressions: { [selectedLang?.code]: localData.impressions },
           localTopKeyword: { [selectedLang?.code]: localData.topKeyword },
@@ -516,29 +531,47 @@ export default function App() {
     let inlinks: any[] = [];
 
     if (scanResults) {
-      linking = scanResults.opportunities
-        .filter((opp: any) => isEnglishUrl(opp.enLink))
-        .map((opp: any, i: number) => ({
-          id: `link-${i}`,
-          enUrl: opp.enLink,
-          originalLink: opp.originalLink,
-          localizedUrls: { [selectedLang?.code || '']: opp.i18nLink },
-          sourceUrl: opp.source,
-          linksToEn: 1 
-        }));
+      const oppsMap = new Map();
+      (scanResults.opportunities || []).forEach((opp: any) => {
+        if (!isEnglishUrl(opp.enLink) || isOtherLangUrl(opp.source)) return;
+
+        const resolvedEnLink = resolveRedirect(opp.enLink);
+        const resolvedOriginal = resolveRedirect(opp.originalLink);
+
+        const targetCluster = clusters.find(c => c.en === resolvedEnLink || c.en === opp.enLink);
+        const targetI18nLink = targetCluster?.[selectedLang?.code || ''] || opp.i18nLink;
+
+        if (resolvedOriginal === targetI18nLink) return;
+
+        const key = `${opp.source}-${opp.originalLink}`;
+        if (!oppsMap.has(key)) {
+          oppsMap.set(key, {
+            enUrl: resolvedEnLink,
+            originalLink: opp.originalLink,
+            localizedUrls: { [selectedLang?.code || '']: targetI18nLink },
+            sourceUrl: opp.source,
+            linksToEn: 1
+          });
+        }
+      });
+      linking = Array.from(oppsMap.values()).map((opp, i) => ({ ...opp, id: `link-${i}` }));
 
       const brokenMap = new Map();
       scanResults.brokenLinks?.forEach((bl: any) => {
-        if (!brokenMap.has(bl.brokenLink)) {
-          brokenMap.set(bl.brokenLink, {
-            id: `broken-${bl.brokenLink}`,
-            enUrl: bl.brokenLink,
+        if (isOtherLangUrl(bl.brokenLink) || isOtherLangUrl(bl.source)) return;
+
+        const resolvedBroken = resolveRedirect(bl.brokenLink);
+
+        if (!brokenMap.has(resolvedBroken)) {
+          brokenMap.set(resolvedBroken, {
+            id: `broken-${resolvedBroken}`,
+            enUrl: resolvedBroken,
             sources: [],
             brokenLinksCount: 0
           });
         }
-        const item = brokenMap.get(bl.brokenLink);
-        if (!item.sources.includes(bl.source)) {
+        const item = brokenMap.get(resolvedBroken);
+        if (!item.sources.includes(bl.source) && bl.source !== "Sitemap Check") {
           item.sources.push(bl.source);
         }
         item.brokenLinksCount += 1;
@@ -546,26 +579,57 @@ export default function App() {
       brokenLinks = Array.from(brokenMap.values());
 
       redirects = (scanResults.redirects || [])
-        .filter((r: any) => 
-          !isOtherLangUrl(r.originalUrl) && 
-          !isOtherLangUrl(r.destinationUrl) && 
-          r.sources && 
-          r.sources.length > 0 &&
-          r.sources.some((s: string) => s !== "Sitemap Check" && s !== "Missing Translation Check") 
-        )
-        .map((r: any, i: number) => ({
-          ...r,
-          id: `redirect-${i}`
-        }));
-      inlinks = (scanResults.inlinks || []).map((link: any, i: number) => ({
-        ...link,
-        id: `inlink-${i}`
-      }));
+        .filter((r: any) => !isOtherLangUrl(r.originalUrl) && !isOtherLangUrl(r.destinationUrl))
+        .map((r: any, i: number) => {
+          // STRICT FILTER: Remove any source that belongs to another language
+          const validSources = (r.sources || []).filter((s: string) =>
+            !isOtherLangUrl(s) && s !== "Sitemap Check" && s !== "Missing Translation Check"
+          );
+          return {
+            ...r,
+            sources: validSources,
+            id: `redirect-${i}`
+          };
+        })
+        .filter((r: any) => r.sources.length > 0); // Only keep the redirect if it still has valid sources
+
+      const mergedInlinks = new Map();
+      (scanResults.inlinks || []).forEach((link: any) => {
+        if (isOtherLangUrl(link.url)) return;
+
+        const resolvedUrl = resolveRedirect(link.url);
+
+        if (!mergedInlinks.has(resolvedUrl)) {
+          mergedInlinks.set(resolvedUrl, {
+            url: resolvedUrl,
+            inlinks: 0,
+            uniqueInlinks: 0,
+            sources: [],
+            seenAnchors: new Set()
+          });
+        }
+
+        const merged = mergedInlinks.get(resolvedUrl);
+
+        // STRICT FILTER: Validate each source before counting it
+        (link.sources || []).forEach((src: any) => {
+          if (isOtherLangUrl(src.url)) return; // Discard international sources
+
+          merged.sources.push(src);
+          merged.inlinks += 1; // Only increment if the source is valid
+
+          if (src.anchor && !merged.seenAnchors.has(src.anchor)) {
+            merged.seenAnchors.add(src.anchor);
+            merged.uniqueInlinks += 1;
+          }
+        });
+      });
+
+      inlinks = Array.from(mergedInlinks.values()).map((link, i) => ({ ...link, id: `inlink-${i}` }));
     }
 
     return { missing, freshness, optimizations, linking, brokenLinks, redirects, inlinks };
   };
-
   const filteredData = getFilteredData();
   const activeTabArray = getActiveTabArray();
 
@@ -576,7 +640,7 @@ export default function App() {
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
-        direction = 'asc';
+      direction = 'asc';
     }
     setSortConfig({ key, direction });
   };
@@ -631,7 +695,7 @@ export default function App() {
       case 'inlinks':
         headers = ['Destination URL', 'Total Inlinks', 'Unique Anchors', 'Sources'];
         rows = activeTabArray.map(row => [
-          row.url, row.inlinks, row.uniqueInlinks, 
+          row.url, row.inlinks, row.uniqueInlinks,
           row.sources?.map((s: any) => `${s.url} ("${s.anchor}")`).join(' | ') || ''
         ]);
         break;
@@ -653,18 +717,18 @@ export default function App() {
   };
 
   const SortableHeader = ({ label, sortKey }: { label: string, sortKey: string }) => (
-    <th 
-        className="p-4 font-semibold cursor-pointer hover:bg-slate-200 transition-colors select-none group"
-        onClick={() => handleSort(sortKey)}
+    <th
+      className="p-4 font-semibold cursor-pointer hover:bg-slate-200 transition-colors select-none group"
+      onClick={() => handleSort(sortKey)}
     >
-        <div className="flex items-center gap-1">
-            {label}
-            {sortConfig?.key === sortKey ? (
-                sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-500" /> : <ArrowDown className="w-3 h-3 text-indigo-500" />
-            ) : (
-                <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-400" />
-            )}
-        </div>
+      <div className="flex items-center gap-1">
+        {label}
+        {sortConfig?.key === sortKey ? (
+          sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-500" /> : <ArrowDown className="w-3 h-3 text-indigo-500" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-400" />
+        )}
+      </div>
     </th>
   );
 
@@ -679,7 +743,7 @@ export default function App() {
           </div>
           <div className="p-8 text-center">
             <p className="text-slate-600 mb-8">Connect your Google Search Console to securely import your sitemaps and search data.</p>
-            <button 
+            <button
               onClick={handleLogin}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
             >
@@ -707,36 +771,36 @@ export default function App() {
           </div>
         </div>
 
-<nav className="flex-1 py-4 flex flex-col gap-1 px-3 overflow-y-auto">
+        <nav className="flex-1 py-4 flex flex-col gap-1 px-3 overflow-y-auto">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">AI & Content Tools</div>
           <button onClick={() => { setActiveTab('llm'); setCurrentPage(1); setSortConfig(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'llm' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <BrainCircuit className="w-5 h-5" /> LLM Optimizer
           </button>
-          <button onClick={() => { setActiveTab('optimizations'); setCurrentPage(1); setSortConfig({key: 'localImpressions', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'optimizations' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => { setActiveTab('optimizations'); setCurrentPage(1); setSortConfig({ key: 'localImpressions', direction: 'desc' }); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'optimizations' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Activity className="w-5 h-5" /> Keyword Analysis
           </button>
-          <button onClick={() => { setActiveTab('freshness'); setCurrentPage(1); setSortConfig({key: 'impressions', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'freshness' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => { setActiveTab('freshness'); setCurrentPage(1); setSortConfig({ key: 'impressions', direction: 'desc' }); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'freshness' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Clock className="w-5 h-5" /> Content Freshness
           </button>
-          
+
           {selectedLang?.code !== 'en' && (
-            <button onClick={() => { setActiveTab('missing'); setCurrentPage(1); setSortConfig({key: 'globalImpressions', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'missing' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <button onClick={() => { setActiveTab('missing'); setCurrentPage(1); setSortConfig({ key: 'globalImpressions', direction: 'desc' }); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'missing' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
               <FileText className="w-5 h-5" /> Missing Translations
             </button>
           )}
 
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2 px-3">Technical SEO</div>
-          <button onClick={() => { setActiveTab('inlinks'); setCurrentPage(1); setSortConfig({key: 'inlinks', direction: 'asc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'inlinks' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+          <button onClick={() => { setActiveTab('inlinks'); setCurrentPage(1); setSortConfig({ key: 'inlinks', direction: 'asc' }); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'inlinks' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Network className="w-5 h-5" /> Internal Links
           </button>
-          
+
           {selectedLang?.code !== 'en' && (
             <button onClick={() => { setActiveTab('linking'); setCurrentPage(1); setSortConfig(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'linking' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
               <LinkIcon className="w-5 h-5" /> Link Updates
             </button>
           )}
-          
-          <button onClick={() => { setActiveTab('broken'); setCurrentPage(1); setSortConfig({key: 'brokenLinksCount', direction: 'desc'}); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'broken' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
+
+          <button onClick={() => { setActiveTab('broken'); setCurrentPage(1); setSortConfig({ key: 'brokenLinksCount', direction: 'desc' }); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'broken' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
             <ShieldAlert className="w-5 h-5" /> 404 Finder
           </button>
           <button onClick={() => { setActiveTab('redirects'); setCurrentPage(1); setSortConfig(null); }} className={`w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 transition-colors ${activeTab === 'redirects' ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'hover:bg-slate-800 hover:text-white'}`}>
@@ -760,7 +824,7 @@ export default function App() {
               {getTabTitle()}
             </h2>
           </div>
-            
+
           {activeTab !== 'llm' && languages.length > 0 && (
             <div className="flex items-center gap-4">
               {scanResults && ['linking', 'broken', 'redirects', 'inlinks'].includes(activeTab) && (
@@ -772,7 +836,7 @@ export default function App() {
                 </div>
               )}
               <div className="relative z-50">
-                <button 
+                <button
                   onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
                   className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 pl-3 pr-3 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm flex items-center gap-2 min-w-[150px] justify-between"
                 >
@@ -784,11 +848,11 @@ export default function App() {
                   </div>
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isLangDropdownOpen ? 'rotate-180 text-indigo-500' : ''}`} />
                 </button>
-                
+
                 {isLangDropdownOpen && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-40" 
+                    <div
+                      className="fixed inset-0 z-40"
                       onClick={() => setIsLangDropdownOpen(false)}
                     ></div>
                     <div className="absolute right-0 mt-2 min-w-[150px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden py-1.5 max-h-[60vh] overflow-y-auto ring-1 ring-black/5">
@@ -800,7 +864,7 @@ export default function App() {
                           key={lang.code}
                           onClick={() => {
                             if (lang.code === 'en' && ['missing', 'linking'].includes(activeTab)) {
-                                setActiveTab('optimizations');
+                              setActiveTab('optimizations');
                             }
                             setSelectedLang(lang);
                             setScanResults(null);
@@ -810,9 +874,9 @@ export default function App() {
                           }}
                           className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors ${selectedLang?.code === lang.code ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
                         >
-                           <span className="flex items-center justify-center">
-                              {getFlagEmoji(lang.code)}
-                            </span>
+                          <span className="flex items-center justify-center">
+                            {getFlagEmoji(lang.code)}
+                          </span>
                           <span className="truncate">{lang.name}</span>
                           {selectedLang?.code === lang.code && <CheckCircle2 className="w-4 h-4 ml-auto shrink-0 text-indigo-600" />}
                         </button>
@@ -821,8 +885,8 @@ export default function App() {
                   </>
                 )}
               </div>
-              <button 
-                onClick={runFullScan} 
+              <button
+                onClick={runFullScan}
                 disabled={isLoading}
                 className="bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-medium py-2 px-6 rounded-xl transition-all shadow-md flex items-center gap-2 text-sm"
               >
@@ -839,9 +903,9 @@ export default function App() {
             <div className="flex items-center gap-6 flex-1">
               <div className="flex items-center gap-2 flex-1 max-w-md bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:bg-white transition-all">
                 <Search className="w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Filter by URL..." 
+                <input
+                  type="text"
+                  placeholder="Filter by URL..."
                   value={urlFilter}
                   onChange={(e) => { setUrlFilter(e.target.value); setCurrentPage(1); }}
                   className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder-slate-400"
@@ -850,8 +914,8 @@ export default function App() {
               <div className="w-px h-6 bg-slate-200"></div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-500 font-medium">Min. Impressions:</span>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   min="0"
                   placeholder="0"
                   value={minImpressions}
@@ -860,7 +924,7 @@ export default function App() {
                 />
               </div>
             </div>
-            <button 
+            <button
               onClick={exportToCSV}
               className="ml-4 flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg shadow-sm transition-colors"
             >
@@ -903,18 +967,18 @@ export default function App() {
                   <p className="text-slate-600 mb-6 max-w-2xl text-sm">
                     Analyze any URL to see how easily AI models (like ChatGPT, Perplexity, or Google AI Overviews) can extract and cite your information.
                   </p>
-                  
+
                   <div className="flex gap-4">
                     <div className="flex-1">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         placeholder="https://lucid.co/your-page"
                         value={aisoUrl}
                         onChange={(e) => setAisoUrl(e.target.value)}
                         className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
-                    <button 
+                    <button
                       onClick={runAisoScan}
                       disabled={isAisoLoading || !aisoUrl}
                       className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-medium px-8 py-3 rounded-xl transition-all shadow-sm flex items-center gap-2"
@@ -992,7 +1056,7 @@ export default function App() {
                         return (
                           <tr key={page.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 max-w-xs truncate">
-                               <a href={localUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                              <a href={localUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
                                 {localUrl.replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
                               </a>
                             </td>
@@ -1001,8 +1065,8 @@ export default function App() {
                             </td>
                             <td className="p-4">
                               <div className="flex flex-col gap-2">
-                                <input 
-                                  type="text" 
+                                <input
+                                  type="text"
                                   value={currentKw === 'N/A' ? '' : currentKw}
                                   onChange={(e) => setCustomKeywords((prev: Record<string, string>) => ({ ...prev, [page.id]: e.target.value }))}
                                   placeholder="Enter keyword..."
@@ -1026,7 +1090,7 @@ export default function App() {
                               )}
                             </td>
                             <td className="p-4">
-                              <button 
+                              <button
                                 onClick={() => runOnPageAnalysis(page.id, localUrl, defaultKw)}
                                 disabled={isAnalyzing || (!currentKw || currentKw === 'N/A')}
                                 className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 disabled:opacity-50 transition-colors"
@@ -1068,7 +1132,7 @@ export default function App() {
                       {paginatedData.length > 0 ? paginatedData.map((page) => (
                         <tr key={page.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-4 max-w-sm truncate">
-                             <a href={page.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                            <a href={page.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
                               {page.url.replace('https://lucid.co', '')} <ExternalLink className="w-3 h-3 inline" />
                             </a>
                           </td>
@@ -1080,11 +1144,11 @@ export default function App() {
                             </span>
                           </td>
                           <td className="p-4">
-                             {page.isStale ? (
-                               <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">Update Content</span>
-                             ) : (
-                               <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3 h-3" /> Fresh</span>
-                             )}
+                            {page.isStale ? (
+                              <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">Update Content</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3 h-3" /> Fresh</span>
+                            )}
                           </td>
                         </tr>
                       )) : (
@@ -1163,7 +1227,7 @@ export default function App() {
                               <span className="text-red-500 line-through decoration-red-300">{page.originalLink.replace('https://lucid.co', '')}</span>
                               <ChevronRight className="w-4 h-4 text-slate-400 mx-auto rotate-90 my-1" />
                               <span className="text-emerald-600 font-medium">{page.localizedUrls?.[selectedLang?.code || '']?.replace('https://lucid.co', '')}</span>
-                              
+
                               {page.originalLink !== page.enUrl && (
                                 <span className="text-xs text-slate-400 mt-1 italic">
                                   (Redirects from: {page.originalLink.replace('https://lucid.co', '')})
@@ -1172,9 +1236,9 @@ export default function App() {
                             </div>
                           </td>
                           <td className="p-4">
-                             <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
-                               Update Link
-                             </span>
+                            <span className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                              Update Link
+                            </span>
                           </td>
                         </tr>
                       )) : (
@@ -1381,27 +1445,27 @@ export default function App() {
             )}
 
             {activeTab !== 'llm' && getActiveTabArray().length > itemsPerPage && (
-               <div className="flex justify-center mt-6">
-                 <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                   <button 
-                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                     disabled={currentPage === 1}
-                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-r border-slate-200"
-                   >
-                     Previous
-                   </button>
-                   <span className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50">
-                     Page {currentPage} of {Math.ceil(getActiveTabArray().length / itemsPerPage)}
-                   </span>
-                   <button 
-                     onClick={() => setCurrentPage(p => p + 1)}
-                     disabled={currentPage === Math.ceil(getActiveTabArray().length / itemsPerPage)}
-                     className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-l border-slate-200"
-                   >
-                     Next
-                   </button>
-                 </div>
-               </div>
+              <div className="flex justify-center mt-6">
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-r border-slate-200"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-50">
+                    Page {currentPage} of {Math.ceil(getActiveTabArray().length / itemsPerPage)}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    disabled={currentPage === Math.ceil(getActiveTabArray().length / itemsPerPage)}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:bg-slate-100 border-l border-slate-200"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
 
           </div>
